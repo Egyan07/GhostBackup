@@ -1,0 +1,22 @@
+# GhostBackup Backend Dependencies  (Phase 2: Local SSD)
+
+# API server
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# Scheduling
+APScheduler==3.10.4
+
+# Config / validation
+pydantic==2.7.0
+PyYAML==6.0.1
+
+# Local SSD sync
+xxhash==3.4.1          # ~10 GB/s file hashing for change detection
+psutil==5.9.8          # disk usage stats, filesystem type, SSD health
+
+# File watching (optional real-time sync — used by watcher.py in Phase 3)
+watchdog==4.0.1
+
+# Utilities
+python-multipart==0.0.9

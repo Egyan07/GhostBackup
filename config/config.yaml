@@ -1,0 +1,78 @@
+# GhostBackup Configuration
+# ⚠  NEVER put secrets here. All credentials go in environment variables:
+#    GHOSTBACKUP_TENANT_ID
+#    GHOSTBACKUP_CLIENT_ID
+#    GHOSTBACKUP_CLIENT_SECRET
+#    GHOSTBACKUP_SMTP_PASSWORD
+
+schedule:
+  time: "08:00"                  # HH:MM — daily backup time
+  timezone: "Asia/Kathmandu"     # IANA timezone string
+  max_job_minutes: 240           # kill watchdog after this many minutes
+  retry_count: 3                 # retry failed runs N times
+  retry_delay_minutes: 30        # wait between retry attempts
+
+performance:
+  concurrency: 4                 # parallel download threads (1–8)
+  bandwidth_limit_mbps: 50       # cap bandwidth usage (null = unlimited)
+  max_file_size_gb: 5            # skip files larger than this
+  chunk_size_mb: 10              # chunk size for large file downloads
+
+backup:
+  version_history: true          # capture SharePoint version history
+  version_count: 5               # how many versions to keep per file
+  capture_permissions: true      # export library permissions JSON per run
+  exclude_patterns:
+    - "~$*"                      # Office temp files
+    - "*.tmp"
+    - "Thumbs.db"
+    - ".DS_Store"
+    - "desktop.ini"
+
+retention:
+  daily_days: 90                 # keep daily backups for 90 days
+  weekly_days: 365               # keep Sunday (weekly) snapshots for 1 year
+  guard_days: 7                  # NEVER delete backups newer than this (hard minimum)
+
+storage:
+  onedrive_backup_folder: "GhostBackup"   # root folder in backup OneDrive
+
+smtp:
+  host: "smtp.office365.com"
+  port: 587
+  use_tls: true
+  user: "backup@redparrot.co.uk"         # from address
+  recipients:
+    - "admin@redparrot.co.uk"
+
+logging:
+  level: "INFO"                  # DEBUG | INFO | WARNING | ERROR
+  retention_days: 365
+  log_dir: "logs"
+
+# SharePoint / OneDrive sources to back up
+# path format: /sites/{site-name}/{library-name}  OR  /drives/{drive-id}
+sites:
+  - name: "Client Documents"
+    path: "/sites/RedParrot/ClientDocs"
+    enabled: true
+    versions: true
+    circuit_breaker_threshold: 0.20
+
+  - name: "Tax Returns 2024"
+    path: "/sites/RedParrot/TaxReturns"
+    enabled: true
+    versions: true
+    circuit_breaker_threshold: 0.20
+
+  - name: "Correspondence"
+    path: "/sites/RedParrot/Mail"
+    enabled: true
+    versions: false
+    circuit_breaker_threshold: 0.20
+
+  - name: "HR Files"
+    path: "/sites/RedParrot/HR"
+    enabled: false               # disabled — enable when ready
+    versions: false
+    circuit_breaker_threshold: 0.20

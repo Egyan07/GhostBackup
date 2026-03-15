@@ -1,0 +1,24 @@
+# Dependencies (THIS is the 900MB monster)
+node_modules/
+
+# Build outputs
+dist/
+
+# Release/installer files
+release/
+
+# Environment variables (if you have any)
+.env
+.env.local
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
