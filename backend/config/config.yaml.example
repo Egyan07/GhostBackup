@@ -1,0 +1,70 @@
+# GhostBackup Configuration — EXAMPLE
+# Copy this file to config.yaml and fill in your values.
+# NEVER commit config.yaml — it contains local file paths.
+# Secrets (SMTP password, encryption key) go in .env.local only.
+
+# Primary backup SSD destination
+ssd_path: ""                 # e.g. "D:\\GhostBackup" or "/mnt/backup"
+
+# FIX-P3: Optional second drive for 3-2-1 backup redundancy
+secondary_ssd_path: ""       # e.g. "E:\\GhostBackup2" — leave empty to disable
+
+encryption:
+  enabled: true              # Requires GHOSTBACKUP_ENCRYPTION_KEY in .env.local
+
+schedule:
+  time: "08:00"              # 24h format
+  timezone: "Europe/London"  # UK accounting firm — was Asia/Kathmandu
+  max_job_minutes: 240
+  retry_count: 3
+  retry_delay_minutes: 30
+
+performance:
+  concurrency: 4             # Parallel copy threads
+  max_file_size_gb: 5
+  chunk_size_mb: 4
+
+backup:
+  verify_checksums: true
+  version_count: 5
+  exclude_patterns:
+    - "~$*"
+    - "*.tmp"
+    - Thumbs.db
+    - .DS_Store
+    - desktop.ini
+    - "*.lnk"
+    - pagefile.sys
+    - hiberfil.sys
+    - node_modules
+    - .git
+    - __pycache__
+    - "*.pyc"
+    - .venv
+    - venv
+    - .env
+
+# FIX-P2: UK Companies Act 2006 requires 7-year retention for accounting records
+retention:
+  daily_days: 365            # 1 year of daily backups
+  weekly_days: 2555          # 7 years of weekly backups (Companies Act minimum)
+  compliance_years: 7        # Hard floor — retention cannot be set below this
+  guard_days: 7              # Safety window: never prune backups newer than 7 days
+
+# FIX-P3: Circuit breaker lowered to 5% for financial data sensitivity
+circuit_breaker_threshold: 0.05   # Stop source if >5% of files fail in one run
+
+smtp:
+  host: smtp.office365.com
+  port: 587
+  use_tls: true
+  user: ""                   # e.g. backup@redparrot.co.uk
+  recipients: []             # e.g. ["it@redparrot.co.uk", "admin@redparrot.co.uk"]
+  # Password: set GHOSTBACKUP_SMTP_PASSWORD in .env.local
+
+logging:
+  level: INFO
+  retention_days: 365
+  log_dir: logs
+
+sources: []                  # Add backup sources via the UI

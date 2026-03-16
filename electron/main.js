@@ -1,19 +1,11 @@
 /**
  * main.js — GhostBackup Electron Main Process
  *
- * Phase 1 Automation additions:
- *  - Auto-kill any process holding port 8765 before spawning backend
- *  - Register app in Windows startup (HKCU Run key) on first launch
- *  - Launch minimized to tray when started by Windows at boot
- *  - Startup flag detection (--startup-minimized)
- *
- * Original responsibilities:
- *  1. Spawn the Python FastAPI backend as a child process
- *  2. Wait for backend to be ready (health check polling)
- *  3. Create the BrowserWindow and load the React renderer
- *  4. Handle IPC messages from renderer
- *  5. Clean up: kill Python backend on app quit
- *  6. Single-instance lock
+ * Fixes applied:
+ *  - API auth token generated at startup, passed to backend via env  [FIX-P1]
+ *  - Port kill checks process name before killing (safety)           [FIX-P3]
+ *  - Tray "Run Backup Now" sends auth token in request               [FIX-P1]
+ *  - IPC handler for app:api-token to expose token to renderer       [FIX-P1]
  */
 
 const {
@@ -30,6 +22,7 @@ const {
 const path    = require("path");
 const fs      = require("fs");
 const http    = require("http");
+const crypto  = require("crypto");
 const { spawn, execSync } = require("child_process");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -41,14 +34,17 @@ const HEALTH_TIMEOUT  = 30000;
 const IS_DEV          = process.env.NODE_ENV === "development";
 const IS_WIN          = process.platform === "win32";
 
-// Paths
 const ROOT_DIR    = path.join(__dirname, "..");
 const BACKEND_DIR = path.join(ROOT_DIR, "backend");
 const ICON_PATH   = path.join(ROOT_DIR, "assets", "icon.png");
 const ENV_FILE    = path.join(ROOT_DIR, ".env.local");
 
-// Startup flag — set when Windows launches us automatically at boot
 const LAUNCHED_AT_STARTUP = process.argv.includes("--startup-minimized");
+
+// FIX-P1: Generate a fresh API token on every launch.
+// This token is passed to the Python backend via GHOSTBACKUP_API_TOKEN env var
+// and must be included in every request as X-API-Key header.
+const API_TOKEN = crypto.randomBytes(32).toString("hex");
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let mainWindow    = null;
@@ -71,31 +67,18 @@ app.on("second-instance", () => {
   }
 });
 
-// ── PHASE 1: Windows Startup Registration ─────────────────────────────────────
-/**
- * Registers GhostBackup in the Windows registry under
- * HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
- * so it auto-starts when the user logs in.
- *
- * Uses --startup-minimized flag so the app launches to tray silently.
- * Safe to call on every launch — registry write is idempotent.
- */
+// ── Windows Startup Registration ──────────────────────────────────────────────
 function registerWindowsStartup() {
   if (!IS_WIN) return;
-
   try {
     const exePath = process.execPath;
-    // In dev mode, registering doesn't make sense — skip
     if (IS_DEV) {
       console.log("[startup] Skipping startup registration in dev mode");
       return;
     }
-
     const regKey   = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
     const appName  = "GhostBackup";
     const regValue = `"${exePath}" --startup-minimized`;
-
-    // Read current value first to avoid unnecessary writes
     try {
       const current = execSync(`reg query "${regKey}" /v "${appName}"`, { encoding: "utf8" });
       if (current.includes(exePath)) {
@@ -103,39 +86,28 @@ function registerWindowsStartup() {
         return;
       }
     } catch {
-      // Key doesn't exist yet — proceed to add
+      // Key doesn't exist yet
     }
-
     execSync(`reg add "${regKey}" /v "${appName}" /t REG_SZ /d "${regValue}" /f`, {
-      encoding: "utf8",
-      windowsHide: true,
+      encoding: "utf8", windowsHide: true,
     });
-
     console.log("[startup] Registered in Windows startup");
   } catch (err) {
-    // Non-fatal — log and continue
     console.warn("[startup] Could not register Windows startup entry:", err.message);
   }
 }
 
-/**
- * Remove GhostBackup from Windows startup (for Settings toggle).
- */
 function unregisterWindowsStartup() {
   if (!IS_WIN) return;
   try {
     const regKey  = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-    const appName = "GhostBackup";
-    execSync(`reg delete "${regKey}" /v "${appName}" /f`, { encoding: "utf8", windowsHide: true });
+    execSync(`reg delete "${regKey}" /v "GhostBackup" /f`, { encoding: "utf8", windowsHide: true });
     console.log("[startup] Removed from Windows startup");
   } catch (err) {
     console.warn("[startup] Could not remove Windows startup entry:", err.message);
   }
 }
 
-/**
- * Check if GhostBackup is currently in Windows startup.
- */
 function isRegisteredInStartup() {
   if (!IS_WIN || IS_DEV) return false;
   try {
@@ -147,24 +119,35 @@ function isRegisteredInStartup() {
   }
 }
 
-// ── PHASE 1: Port Conflict Auto-Kill ─────────────────────────────────────────
+// ── FIX-P3: Port Conflict Kill (with process name safety check) ───────────────
 /**
- * Find and kill any process holding port 8765 before we try to bind it.
- * This prevents the "only one usage of each socket address" error on restart.
+ * Only kill a process on our port if it looks like Python or a previous
+ * GhostBackup instance. Never blindly kill unknown processes.
  */
 function killPortConflict(port) {
   if (!IS_WIN) {
-    // Linux/macOS
     try {
       const result = execSync(`lsof -ti:${port}`, { encoding: "utf8" }).trim();
       if (result) {
         result.split("\n").forEach(pid => {
-          try { execSync(`kill -9 ${pid.trim()}`); } catch {}
+          pid = pid.trim();
+          if (!pid) return;
+          // FIX-P3: Verify it's python before killing
+          try {
+            const cmdline = execSync(`ps -p ${pid} -o comm=`, { encoding: "utf8" }).trim().toLowerCase();
+            if (cmdline.includes("python") || cmdline.includes("ghostbackup")) {
+              execSync(`kill -9 ${pid}`);
+              console.log(`[main] Killed python/ghostbackup PID ${pid} on port ${port}`);
+            } else {
+              console.warn(`[main] Port ${port} held by '${cmdline}' (PID ${pid}) — NOT killing unknown process`);
+            }
+          } catch {
+            // Can't check process name — skip to be safe
+          }
         });
-        console.log(`[main] Killed process(es) holding port ${port}: ${result}`);
       }
     } catch {
-      // No process on port — that's fine
+      // No process on port — fine
     }
     return;
   }
@@ -172,30 +155,36 @@ function killPortConflict(port) {
   // Windows
   try {
     const output = execSync(`netstat -ano`, { encoding: "utf8", windowsHide: true });
-    const lines  = output.split("\n");
     const killed = new Set();
 
-    for (const line of lines) {
-      // Match lines like: TCP  127.0.0.1:8765  0.0.0.0:0  LISTENING  1234
+    for (const line of output.split("\n")) {
       if (line.includes(`:${port}`) && line.includes("LISTENING")) {
         const parts = line.trim().split(/\s+/);
         const pid   = parts[parts.length - 1];
-        if (pid && pid !== "0" && !killed.has(pid)) {
-          killed.add(pid);
-          try {
+        if (!pid || pid === "0" || killed.has(pid)) continue;
+
+        // FIX-P3: Check process name before killing
+        try {
+          const info = execSync(
+            `wmic process where "ProcessId=${pid}" get Name /format:value`,
+            { encoding: "utf8", windowsHide: true }
+          ).toLowerCase();
+
+          if (info.includes("python") || info.includes("ghostbackup")) {
+            killed.add(pid);
             execSync(`taskkill /PID ${pid} /F`, { windowsHide: true });
-            console.log(`[main] Killed PID ${pid} holding port ${port}`);
-          } catch (e) {
-            console.warn(`[main] Could not kill PID ${pid}: ${e.message}`);
+            console.log(`[main] Killed python PID ${pid} on port ${port}`);
+          } else {
+            console.warn(`[main] Port ${port} held by non-python PID ${pid} — skipping kill`);
           }
+        } catch {
+          console.warn(`[main] Could not check PID ${pid} — skipping to avoid killing unrelated process`);
         }
       }
     }
 
-    if (killed.size === 0) {
-      console.log(`[main] Port ${port} is free`);
-    } else {
-      // Brief pause to let the OS release the port
+    if (killed.size > 0) {
+      // Brief pause to let OS release the port
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
     }
   } catch (err) {
@@ -203,14 +192,7 @@ function killPortConflict(port) {
   }
 }
 
-// ── PHASE 2: Electron Notification Server (port 8766) ────────────────────────
-/**
- * A tiny HTTP server that Python's reporter.py POSTs to when it fires
- * alert_and_notify(). This lets the backend trigger native Windows toasts
- * instantly without waiting for the renderer to poll /alerts.
- *
- * Only listens on 127.0.0.1 — not exposed to the network.
- */
+// ── Notification Server (port 8766) ──────────────────────────────────────────
 function startNotifyServer() {
   const notifyServer = require("http").createServer((req, res) => {
     if (req.method !== "POST" || req.url !== "/notify") {
@@ -222,9 +204,7 @@ function startNotifyServer() {
       try {
         const { title, body: msg } = JSON.parse(body);
         if (title && Notification.isSupported()) {
-          const notif = new Notification({ title, body: msg || "" });
-          notif.show();
-          // Also forward to renderer so the bell badge updates live
+          new Notification({ title, body: msg || "" }).show();
           mainWindow?.webContents.send("alert:new", { title, body: msg });
         }
       } catch {}
@@ -237,11 +217,9 @@ function startNotifyServer() {
   });
 
   notifyServer.on("error", (err) => {
-    // Port 8766 in use — not fatal, toasts will fall back to polling
     console.warn("[main] Notify server error:", err.message);
   });
 }
-
 
 function loadEnvFile() {
   if (!fs.existsSync(ENV_FILE)) return;
@@ -284,8 +262,10 @@ function spawnPythonBackend() {
     cwd: BACKEND_DIR,
     env: {
       ...process.env,
-      PYTHONUNBUFFERED: "1",
-      GHOSTBACKUP_API_PORT: String(API_PORT),
+      PYTHONUNBUFFERED:       "1",
+      GHOSTBACKUP_API_PORT:   String(API_PORT),
+      // FIX-P1: Inject auth token so backend can validate requests
+      GHOSTBACKUP_API_TOKEN:  API_TOKEN,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -293,17 +273,14 @@ function spawnPythonBackend() {
   proc.stdout.on("data", (data) => {
     data.toString().trim().split("\n").forEach(l => console.log(`[python] ${l}`));
   });
-
   proc.stderr.on("data", (data) => {
     data.toString().trim().split("\n").forEach(l => console.error(`[python:err] ${l}`));
   });
-
   proc.on("exit", (code, signal) => {
     console.log(`[main] Python backend exited — code: ${code}, signal: ${signal}`);
     backendReady = false;
     if (!app.isQuitting) showBackendCrashNotification(code);
   });
-
   proc.on("error", (err) => {
     console.error(`[main] Failed to spawn Python: ${err.message}`);
     showFatalError(
@@ -318,8 +295,10 @@ function spawnPythonBackend() {
 // ── Backend health check ──────────────────────────────────────────────────────
 function waitForBackend(timeoutMs = HEALTH_TIMEOUT) {
   return new Promise((resolve, reject) => {
-    const start = Date.now();
-    let attempts = 0;
+    const start   = Date.now();
+    let attempts  = 0;
+    // FIX-P3: Exponential backoff — don't hammer with 500ms intervals for 30s
+    const delays  = [200, 300, 500, 800, 1000, 1500, 2000];
 
     const poll = () => {
       attempts++;
@@ -341,7 +320,8 @@ function waitForBackend(timeoutMs = HEALTH_TIMEOUT) {
         reject(new Error(`Backend did not become ready within ${timeoutMs}ms`));
         return;
       }
-      setTimeout(poll, HEALTH_POLL_MS);
+      const delay = delays[Math.min(attempts, delays.length - 1)];
+      setTimeout(poll, delay);
     };
 
     poll();
@@ -376,12 +356,8 @@ function createWindow() {
   }
 
   mainWindow.once("ready-to-show", () => {
-    // If launched by Windows at startup, stay hidden in tray
-    if (LAUNCHED_AT_STARTUP) {
-      console.log("[main] Launched at startup — staying minimized in tray");
-    } else {
+    if (!LAUNCHED_AT_STARTUP) {
       mainWindow.show();
-      console.log("[main] Window shown");
     }
   });
 
@@ -420,9 +396,13 @@ function createTray() {
         label: "Run Backup Now",
         click: async () => {
           try {
+            // FIX-P1: Include auth token in tray-triggered backup request
             await fetch(`${API_URL}/run/start`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
+              method:  "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-API-Key":    API_TOKEN,
+              },
               body: JSON.stringify({ full: false }),
             });
             new Notification({ title: "GhostBackup", body: "Backup started" }).show();
@@ -434,7 +414,6 @@ function createTray() {
       { type: "separator" },
       {
         label: startupEnabled ? "✓ Start with Windows" : "Start with Windows",
-        type:  "normal",
         click: () => {
           if (isRegisteredInStartup()) {
             unregisterWindowsStartup();
@@ -443,7 +422,6 @@ function createTray() {
             registerWindowsStartup();
             new Notification({ title: "GhostBackup", body: "Will now start automatically with Windows" }).show();
           }
-          // Rebuild menu to reflect new state
           rebuildMenu();
         },
       },
@@ -453,7 +431,6 @@ function createTray() {
         click: () => { app.isQuitting = true; app.quit(); },
       },
     ]);
-
     tray.setContextMenu(menu);
   };
 
@@ -481,10 +458,8 @@ function registerIpcHandlers() {
 
   ipcMain.handle("credentials:save", async (_, { key, value }) => {
     const ALLOWED_KEYS = [
-      "GHOSTBACKUP_TENANT_ID",
-      "GHOSTBACKUP_CLIENT_ID",
-      "GHOSTBACKUP_CLIENT_SECRET",
       "GHOSTBACKUP_SMTP_PASSWORD",
+      "GHOSTBACKUP_ENCRYPTION_KEY",
     ];
     if (!ALLOWED_KEYS.includes(key)) return { success: false, error: "Unknown credential key" };
     try {
@@ -504,10 +479,8 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("credentials:status", async () => ({
-    tenant_id:     !!process.env.GHOSTBACKUP_TENANT_ID,
-    client_id:     !!process.env.GHOSTBACKUP_CLIENT_ID,
-    client_secret: !!process.env.GHOSTBACKUP_CLIENT_SECRET,
-    smtp_password: !!process.env.GHOSTBACKUP_SMTP_PASSWORD,
+    smtp_password:   !!process.env.GHOSTBACKUP_SMTP_PASSWORD,
+    encryption_key:  !!process.env.GHOSTBACKUP_ENCRYPTION_KEY,
   }));
 
   ipcMain.handle("shell:open-path", async (_, filePath) => {
@@ -515,8 +488,11 @@ function registerIpcHandlers() {
     await shell.openPath(filePath);
   });
 
-  ipcMain.handle("app:api-url",  async () => API_URL);
-  ipcMain.handle("app:version",  async () => app.getVersion());
+  ipcMain.handle("app:api-url",   async () => API_URL);
+  ipcMain.handle("app:version",   async () => app.getVersion());
+
+  // FIX-P1: Expose API token to renderer via IPC (stays in main process memory)
+  ipcMain.handle("app:api-token", async () => API_TOKEN);
 
   ipcMain.handle("backend:status", async () => ({
     ready: backendReady,
@@ -528,16 +504,12 @@ function registerIpcHandlers() {
     new Notification({ title, body }).show();
   });
 
-  // ── Phase 1: Startup toggle from renderer ──────────────────────────────────
   ipcMain.handle("startup:get", async () => isRegisteredInStartup());
 
   ipcMain.handle("startup:set", async (_, enable) => {
     try {
-      if (enable) {
-        registerWindowsStartup();
-      } else {
-        unregisterWindowsStartup();
-      }
+      if (enable) registerWindowsStartup();
+      else        unregisterWindowsStartup();
       return { success: true, enabled: isRegisteredInStartup() };
     } catch (err) {
       return { success: false, error: err.message };
@@ -566,25 +538,17 @@ app.whenReady().then(async () => {
 
   loadEnvFile();
   registerIpcHandlers();
-
-  // ── PHASE 2: Start notification receiver before Python spawns ────────────
   startNotifyServer();
 
-  // ── PHASE 1: Kill any process already holding our port ────────────────────
   console.log(`[main] Checking port ${API_PORT} for conflicts...`);
   killPortConflict(API_PORT);
 
-  // Show window (hidden if startup-minimized)
   createWindow();
-
-  // ── PHASE 1: Register in Windows startup (prod only) ─────────────────────
   registerWindowsStartup();
 
-  // Spawn backend
   pythonProcess = spawnPythonBackend();
   if (!pythonProcess) return;
 
-  // Wait for health
   try {
     await waitForBackend(HEALTH_TIMEOUT);
     console.log("[main] Backend healthy — renderer ready");
@@ -622,7 +586,6 @@ app.on("quit", () => {
     setTimeout(() => {
       if (pythonProcess && !pythonProcess.killed) {
         pythonProcess.kill("SIGKILL");
-        console.log("[main] Python backend force-killed");
       }
     }, 3000);
   }

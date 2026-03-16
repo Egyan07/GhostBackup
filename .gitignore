@@ -1,24 +1,52 @@
-# Dependencies (THIS is the 900MB monster)
+# Dependencies
 node_modules/
 
 # Build outputs
 dist/
-
-# Release/installer files
 release/
 
-# Environment variables (if you have any)
+# Environment / secrets — NEVER commit these
 .env
 .env.local
+*.env
+
+# === DATABASES — contain backup run history, never commit ===
+*.db
+*.db-shm
+*.db-wal
+
+# === CONFIG — contains local paths; use config.yaml.example instead ===
+backend/config/config.yaml
+config/config.yaml
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# GhostBackup runtime directories (generated at runtime)
+backend/logs/
+backend/reports/
 
 # OS generated files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # IDE files
 .vscode/
 .idea/
+*.swp
 
 # Logs
 *.log
 npm-debug.log*
+
+# Temp / crash files
+*.ghosttmp

@@ -1,14 +1,13 @@
 """
-manifest.py — GhostBackup SQLite Manifest Database  (Phase 2: Local SSD)
+manifest.py — GhostBackup SQLite Manifest Database
 
-Schema changes vs Phase 1 (cloud):
-  - delta_tokens table REMOVED (was Graph API-specific)
-  - file_hashes table ADDED: stores xxhash + mtime per source path so the
-    syncer can detect changes without re-hashing every file on every run
-  - files.sha256 renamed to files.xxhash (non-cryptographic, fast)
-  - files.library renamed to files.source_label (matches SourceConfig.label)
-  - get_file_hash() / save_file_hash() added for incremental change detection
-  - get_backup_files_for_prune() added for retention pruning
+Fixes applied:
+  - DB_PATH now anchored to __file__ directory (not CWD)        [FIX-P0]
+  - get_file_hash() now acquires lock before read               [FIX-P1]
+  - clear_file_hashes() rewritten to use path prefix correctly  [FIX-P1]
+  - synchronous=FULL for power-loss safety                      [FIX-P3]
+  - mark_run_pruned() uses date range instead of LIKE           [FIX-P3]
+  - config_audit table added for compliance trail               [FIX-P2]
 """
 
 import json
@@ -21,7 +20,8 @@ from typing import Optional
 
 logger = logging.getLogger("manifest")
 
-DB_PATH = Path("ghostbackup.db")
+# FIX-P0: Anchor DB path to the directory this module lives in, not CWD
+DB_PATH = Path(__file__).parent / "ghostbackup.db"
 
 
 class ManifestDB:
@@ -41,7 +41,8 @@ class ManifestDB:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
-        self._conn.execute("PRAGMA synchronous=NORMAL")   # safe + faster than FULL
+        # FIX-P3: Use FULL sync — NORMAL can lose WAL frames on power cut
+        self._conn.execute("PRAGMA synchronous=FULL")
         self._migrate()
         logger.info(f"ManifestDB ready: {db_path}")
 
@@ -75,24 +76,21 @@ class ManifestDB:
                 CREATE TABLE IF NOT EXISTS files (
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
                     run_id          INTEGER NOT NULL REFERENCES runs(id),
-                    source_label    TEXT NOT NULL,      -- SourceConfig.label
-                    name            TEXT NOT NULL,      -- filename only
-                    original_path   TEXT NOT NULL,      -- absolute source path
-                    backup_path     TEXT NOT NULL,      -- absolute backup path on SSD
+                    source_label    TEXT NOT NULL,
+                    name            TEXT NOT NULL,
+                    original_path   TEXT NOT NULL,
+                    backup_path     TEXT NOT NULL,
                     size            INTEGER NOT NULL DEFAULT 0,
-                    xxhash          TEXT,               -- xxhash64 of source file
-                    last_modified   REAL,               -- source mtime (float)
+                    xxhash          TEXT,
+                    last_modified   REAL,
                     transferred_at  TEXT NOT NULL
                 );
 
-                -- Per-file hash + mtime cache for incremental change detection.
-                -- Updated every time a file is successfully backed up.
-                -- Keyed on source_path so the syncer can do a fast mtime pre-check,
-                -- and only re-hash when mtime has changed.
+                -- Per-file hash + mtime cache for incremental change detection
                 CREATE TABLE IF NOT EXISTS file_hashes (
                     source_path     TEXT PRIMARY KEY,
                     xxhash          TEXT NOT NULL,
-                    mtime           REAL NOT NULL,      -- os.stat mtime_ns / 1e9
+                    mtime           REAL NOT NULL,
                     size            INTEGER NOT NULL,
                     backed_up_at    TEXT NOT NULL
                 );
@@ -106,6 +104,16 @@ class ManifestDB:
                     message     TEXT NOT NULL
                 );
 
+                -- FIX-P2: Immutable audit trail for configuration changes
+                CREATE TABLE IF NOT EXISTS config_audit (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    changed_at  TEXT NOT NULL,
+                    field       TEXT NOT NULL,
+                    old_value   TEXT,
+                    new_value   TEXT NOT NULL,
+                    machine     TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_files_run      ON files(run_id);
                 CREATE INDEX IF NOT EXISTS idx_files_source   ON files(source_label);
                 CREATE INDEX IF NOT EXISTS idx_files_orig     ON files(original_path);
@@ -114,6 +122,7 @@ class ManifestDB:
                 CREATE INDEX IF NOT EXISTS idx_runs_status    ON runs(status);
                 CREATE INDEX IF NOT EXISTS idx_runs_started   ON runs(started_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_hashes_path    ON file_hashes(source_path);
+                CREATE INDEX IF NOT EXISTS idx_audit_ts       ON config_audit(changed_at DESC);
             """)
             self._conn.commit()
 
@@ -142,7 +151,6 @@ class ManifestDB:
         except Exception:
             dur = 0
 
-        # Store folder_summary under both keys so old UI code still works
         folder_summary = run_state.get("libraries") or run_state.get("folders", {})
 
         with self._lock:
@@ -173,18 +181,22 @@ class ManifestDB:
             self._conn.commit()
         logger.info(f"Run #{run_id} finalized — {status}")
 
-    def mark_run_pruned(self, run_date: str) -> None:
+    def mark_run_pruned(self, run_date_start: str, run_date_end: str) -> None:
+        """
+        FIX-P3: Use explicit date range instead of fragile LIKE matching.
+        Caller passes ISO date strings: run_date_start (inclusive), run_date_end (exclusive).
+        Example: mark_run_pruned("2026-03-16", "2026-03-17")
+        """
         with self._lock:
             self._conn.execute(
-                "UPDATE runs SET pruned = 1 WHERE started_at LIKE ?",
-                (f"{run_date}%",),
+                "UPDATE runs SET pruned = 1 WHERE started_at >= ? AND started_at < ?",
+                (run_date_start, run_date_end),
             )
             self._conn.commit()
 
     # ── File records ──────────────────────────────────────────────────────────
 
     def record_file(self, run_id: int, file_meta: dict, backup_path: str) -> None:
-        """Record a successfully transferred file in the files table."""
         with self._lock:
             self._conn.execute(
                 """INSERT INTO files
@@ -209,18 +221,18 @@ class ManifestDB:
 
     def get_file_hash(self, source_path: str) -> Optional[dict]:
         """
-        Return cached {xxhash, mtime, size} for a source path, or None.
-        Called by syncer before hashing — if mtime matches, skip re-hash.
+        FIX-P1: Acquire lock before read to prevent race with concurrent saves.
+        Returns cached {xxhash, mtime, size} or None.
         """
-        row = self._conn.execute(
-            "SELECT xxhash, mtime, size FROM file_hashes WHERE source_path = ?",
-            (source_path,),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT xxhash, mtime, size FROM file_hashes WHERE source_path = ?",
+                (source_path,),
+            ).fetchone()
         return dict(row) if row else None
 
     def save_file_hash(self, source_path: str, xxhash: str,
                        mtime: float, size: int) -> None:
-        """Upsert the hash cache entry after a successful copy or skip."""
         with self._lock:
             self._conn.execute(
                 """INSERT INTO file_hashes (source_path, xxhash, mtime, size, backed_up_at)
@@ -234,18 +246,19 @@ class ManifestDB:
             )
             self._conn.commit()
 
-    def clear_file_hashes(self, source_label: Optional[str] = None) -> int:
+    def clear_file_hashes(self, source_path_prefix: Optional[str] = None) -> int:
         """
-        Clear hash cache entries — forces full re-hash on next run.
-        Pass source_label to clear only one folder, or None to clear all.
+        FIX-P1: Accepts source_path_prefix (not label) for correct matching.
+        Pass source folder path prefix to clear only one source, or None to clear all.
+        Example: clear_file_hashes("C:\\\\Projects\\\\Accounts")
         """
         with self._lock:
-            if source_label:
-                # Can't join on source_label directly — clear by path prefix
-                # Caller should pass source path prefix instead if needed
+            if source_path_prefix:
+                # Escape LIKE wildcards in the prefix itself
+                escaped = source_path_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
                 cur = self._conn.execute(
-                    "DELETE FROM file_hashes WHERE source_path LIKE ?",
-                    (f"%{source_label}%",),
+                    "DELETE FROM file_hashes WHERE source_path LIKE ? ESCAPE '\\'",
+                    (f"{escaped}%",),
                 )
             else:
                 cur = self._conn.execute("DELETE FROM file_hashes")
@@ -257,10 +270,6 @@ class ManifestDB:
     def get_backup_files_for_prune(
         self, source_label: str, older_than_date: str
     ) -> list[dict]:
-        """
-        Return backup file records older than a cutoff date for a given source.
-        Used by the retention pruner to delete stale SSD files.
-        """
         rows = self._conn.execute(
             """SELECT f.backup_path, f.size, r.started_at
                FROM files f
@@ -270,6 +279,39 @@ class ManifestDB:
                  AND r.pruned = 0
                ORDER BY r.started_at ASC""",
             (source_label, older_than_date),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Config audit trail (FIX-P2) ───────────────────────────────────────────
+
+    def log_config_change(self, field: str, old_value, new_value) -> None:
+        """
+        Record a configuration change in the immutable audit trail.
+        Called by ConfigManager.update() whenever settings are modified.
+        """
+        import socket
+        try:
+            machine = socket.gethostname()
+        except Exception:
+            machine = "unknown"
+        with self._lock:
+            self._conn.execute(
+                """INSERT INTO config_audit (changed_at, field, old_value, new_value, machine)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    datetime.utcnow().isoformat(),
+                    field,
+                    json.dumps(old_value) if old_value is not None else None,
+                    json.dumps(new_value),
+                    machine,
+                ),
+            )
+            self._conn.commit()
+
+    def get_config_audit(self, limit: int = 100) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM config_audit ORDER BY changed_at DESC LIMIT ?",
+            (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -285,73 +327,76 @@ class ManifestDB:
 
     def get_logs(self, run_id: int, level: Optional[str] = None,
                  limit: int = 500) -> list[dict]:
-        if level:
-            rows = self._conn.execute(
-                "SELECT * FROM logs WHERE run_id = ? AND level = ? "
-                "ORDER BY logged_at DESC LIMIT ?",
-                (run_id, level.upper(), limit),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM logs WHERE run_id = ? "
-                "ORDER BY logged_at DESC LIMIT ?",
-                (run_id, limit),
-            ).fetchall()
+        with self._lock:
+            if level:
+                rows = self._conn.execute(
+                    "SELECT * FROM logs WHERE run_id = ? AND level = ? "
+                    "ORDER BY logged_at DESC LIMIT ?",
+                    (run_id, level.upper(), limit),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM logs WHERE run_id = ? "
+                    "ORDER BY logged_at DESC LIMIT ?",
+                    (run_id, limit),
+                ).fetchall()
         return [dict(r) for r in rows]
 
     # ── Run queries ───────────────────────────────────────────────────────────
 
     def get_runs(self, limit: int = 30, offset: int = 0) -> list[dict]:
-        rows = self._conn.execute(
-            """SELECT id, started_at, finished_at, status, full_backup,
-                      files_transferred, files_failed, bytes_transferred,
-                      duration_seconds, pruned
-               FROM runs
-               ORDER BY started_at DESC
-               LIMIT ? OFFSET ?""",
-            (limit, offset),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT id, started_at, finished_at, status, full_backup,
+                          files_transferred, files_failed, bytes_transferred,
+                          duration_seconds, pruned
+                   FROM runs
+                   ORDER BY started_at DESC
+                   LIMIT ? OFFSET ?""",
+                (limit, offset),
+            ).fetchall()
         return [self._format_run(dict(r)) for r in rows]
 
     def get_run(self, run_id: int) -> Optional[dict]:
-        row = self._conn.execute(
-            "SELECT * FROM runs WHERE id = ?", (run_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM runs WHERE id = ?", (run_id,)
+            ).fetchone()
         if not row:
             return None
         run = dict(row)
-        # Support both old key (library_summary) and new key (folder_summary)
         summary_raw = run.get("folder_summary") or run.get("library_summary") or "{}"
         run["folder_summary"]  = json.loads(summary_raw)
-        run["library_summary"] = run["folder_summary"]   # backwards compat
+        run["library_summary"] = run["folder_summary"]
         run["errors"]          = json.loads(run.get("errors") or "[]")
         return self._format_run(run)
 
     def get_files(self, run_id: int, library: Optional[str] = None,
                   subfolder: Optional[str] = None) -> list[dict]:
-        """library param accepted as source_label for backwards compat."""
-        if library and subfolder:
-            rows = self._conn.execute(
-                "SELECT * FROM files WHERE run_id = ? AND source_label = ? "
-                "AND original_path LIKE ?",
-                (run_id, library, f"%{subfolder}%"),
-            ).fetchall()
-        elif library:
-            rows = self._conn.execute(
-                "SELECT * FROM files WHERE run_id = ? AND source_label = ?",
-                (run_id, library),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM files WHERE run_id = ?", (run_id,)
-            ).fetchall()
+        with self._lock:
+            if library and subfolder:
+                rows = self._conn.execute(
+                    "SELECT * FROM files WHERE run_id = ? AND source_label = ? "
+                    "AND original_path LIKE ?",
+                    (run_id, library, f"%{subfolder}%"),
+                ).fetchall()
+            elif library:
+                rows = self._conn.execute(
+                    "SELECT * FROM files WHERE run_id = ? AND source_label = ?",
+                    (run_id, library),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM files WHERE run_id = ?", (run_id,)
+                ).fetchall()
         return [dict(r) for r in rows]
 
     def get_latest_successful_run(self) -> Optional[dict]:
-        row = self._conn.execute(
-            "SELECT * FROM runs WHERE status = 'success' "
-            "ORDER BY started_at DESC LIMIT 1"
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM runs WHERE status = 'success' "
+                "ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
         return dict(row) if row else None
 
     # ── Helpers ───────────────────────────────────────────────────────────────

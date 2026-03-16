@@ -1,14 +1,12 @@
 /**
  * main.jsx — GhostBackup React Entry Point
  *
- * Wraps the app in a BackendProvider that:
- *  - Waits for the Electron main process to signal backend ready
- *  - Shows a loading splash while backend is starting
- *  - Shows a crash screen if backend dies
- *  - Provides the API URL to all components via context
+ * Fixes applied:
+ *  - Startup polling uses exponential backoff instead of fixed 800ms [FIX-P3]
+ *  - Poll clears itself when backend becomes ready                   [FIX-P3]
  */
 
-import { createRoot }     from "react-dom/client";
+import { createRoot }          from "react-dom/client";
 import { useState, useEffect } from "react";
 import App from "./GhostBackup.jsx";
 
@@ -29,19 +27,19 @@ const splash = `
   .error{color:#ff4757;margin-top:16px;font-size:12px;max-width:400px}
 `;
 
+// FIX-P3: Exponential backoff delays (ms) for startup poll
+const BACKOFF_DELAYS = [200, 400, 800, 1500, 2500, 4000, 5000];
+
 function BackendProvider() {
-  const [state, setState] = useState("loading"); // loading | ready | crashed
+  const [state, setState]       = useState("loading");
   const [crashCode, setCrashCode] = useState(null);
 
   useEffect(() => {
-    // Check if running in Electron
     if (!window.ghostbackup) {
-      // Running in browser (dev without Electron) — assume backend is up
       setState("ready");
       return;
     }
 
-    // Listen for backend ready event from main process
     const unsubReady = window.ghostbackup.onBackendReady(() => {
       setState("ready");
     });
@@ -51,21 +49,35 @@ function BackendProvider() {
       setCrashCode(exitCode);
     });
 
-    // Also poll in case we missed the event (renderer loaded after backend ready)
-    const poll = setInterval(async () => {
+    // FIX-P3: Exponential backoff poll — check if backend is up in case we
+    // missed the IPC event (e.g. renderer loaded after backend was already ready)
+    let attempt   = 0;
+    let timeoutId = null;
+    let cancelled = false;
+
+    const poll = async () => {
+      if (cancelled) return;
       try {
         const status = await window.ghostbackup.backendStatus();
         if (status.ready) {
-          clearInterval(poll);
           setState("ready");
+          return;
         }
       } catch {}
-    }, 800);
+      // Schedule next attempt with exponential backoff
+      const delay = BACKOFF_DELAYS[Math.min(attempt, BACKOFF_DELAYS.length - 1)];
+      attempt++;
+      timeoutId = setTimeout(poll, delay);
+    };
+
+    // Start first poll after a short delay
+    timeoutId = setTimeout(poll, 200);
 
     return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
       unsubReady?.();
       unsubCrash?.();
-      clearInterval(poll);
     };
   }, []);
 
@@ -84,15 +96,13 @@ function BackendProvider() {
           </div>
         )}
         {state === "crashed" && (
-          <>
-            <div className="error">
-              ✕ The backup service stopped unexpectedly (exit code: {crashCode}).
-              <br /><br />
-              Check that Python 3.10+ is installed and run:
-              <br />
-              <code>pip install -r backend/requirements.txt</code>
-            </div>
-          </>
+          <div className="error">
+            ✕ The backup service stopped unexpectedly (exit code: {crashCode}).
+            <br /><br />
+            Check that Python 3.10+ is installed and run:
+            <br />
+            <code>pip install -r backend/requirements.txt</code>
+          </div>
         )}
       </div>
     </>

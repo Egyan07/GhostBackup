@@ -1,4 +1,4 @@
-# GhostBackup Backend Dependencies  (Phase 2: Local SSD)
+# GhostBackup Backend Dependencies
 
 # API server
 fastapi==0.111.0
@@ -13,9 +13,12 @@ PyYAML==6.0.1
 
 # Local SSD sync
 xxhash==3.4.1          # ~10 GB/s file hashing for change detection
-psutil==5.9.8          # disk usage stats, filesystem type, SSD health
+psutil==5.9.8          # disk usage stats, filesystem type
 
-# File watching (optional real-time sync — used by watcher.py in Phase 3)
+# Encryption at rest (AES-128-CBC via Fernet — required for accounting data compliance)
+cryptography==42.0.5
+
+# File watching (real-time sync)
 watchdog==4.0.1
 
 # Utilities

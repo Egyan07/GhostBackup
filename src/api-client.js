@@ -1,112 +1,88 @@
 /**
- * api-client.js — GhostBackup React API Client
+ * api-client.js — GhostBackup API Client
  *
- * Centralises all fetch() calls from the React UI to the FastAPI backend.
- * Handles errors, JSON parsing, and provides typed response objects.
- *
- * Usage:
- *   import api from './api-client';
- *   const data = await api.dashboard();
- *   await api.startRun({ full: false });
+ * Fixes applied:
+ *  - All requests include X-API-Key header from Electron IPC   [FIX-P1]
+ *  - Token cached after first IPC call (Electron) or env var   [FIX-P1]
+ *  - getApiToken() returns empty string in browser dev mode     [FIX-P1]
  */
 
-const BASE = "http://127.0.0.1:8765";
+const BASE_URL = "http://127.0.0.1:8765";
 
-// ── Core fetch wrapper ────────────────────────────────────────────────────────
-async function request(method, path, body = null) {
-  const opts = {
+// FIX-P1: Cache the API token — fetched once from Electron IPC on first request.
+let _cachedToken = null;
+
+async function _getToken() {
+  if (_cachedToken !== null) return _cachedToken;
+
+  if (window.ghostbackup?.getApiToken) {
+    try {
+      _cachedToken = await window.ghostbackup.getApiToken();
+    } catch {
+      _cachedToken = "";
+    }
+  } else {
+    // Browser dev mode without Electron — no token required
+    _cachedToken = "";
+  }
+  return _cachedToken;
+}
+
+export class ApiError extends Error {
+  constructor(status, message, body) {
+    super(message);
+    this.status = status;
+    this.body   = body;
+  }
+}
+
+/**
+ * Core request wrapper. Automatically includes X-API-Key on every call.
+ */
+export async function request(method, path, body, params) {
+  const token = await _getToken();
+
+  let url = BASE_URL + path;
+  if (params) {
+    const qs = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params)
+          .filter(([, v]) => v != null)
+          .map(([k, v]) => [k, String(v)])
+      )
+    );
+    if (qs.toString()) url += "?" + qs.toString();
+  }
+
+  const headers = { "Content-Type": "application/json" };
+
+  // FIX-P1: Attach auth token to every request
+  if (token) {
+    headers["X-API-Key"] = token;
+  }
+
+  const res = await fetch(url, {
     method,
-    headers: { "Content-Type": "application/json" },
-  };
-  if (body !== null) {
-    opts.body = JSON.stringify(body);
-  }
-
-  let res;
-  try {
-    res = await fetch(`${BASE}${path}`, opts);
-  } catch (err) {
-    // Network failure — backend not reachable
-    throw new ApiError(0, "Backend unreachable", err.message);
-  }
-
-  const text = await res.text();
-  let data;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { detail: text };
-  }
+    headers,
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
 
   if (!res.ok) {
-    const detail = data?.detail || `HTTP ${res.status}`;
-    throw new ApiError(res.status, detail, data);
+    let detail = res.statusText;
+    try {
+      const j = await res.json();
+      detail = j.detail || j.message || detail;
+    } catch {}
+    throw new ApiError(res.status, detail, null);
   }
 
-  return data;
+  if (res.status === 204 || res.headers.get("content-length") === "0") return null;
+  return res.json();
 }
 
-const get    = (path)         => request("GET",    path);
-const post   = (path, body)   => request("POST",   path, body   ?? {});
-const patch  = (path, body)   => request("PATCH",  path, body   ?? {});
-const del    = (path)         => request("DELETE", path);
-
-// ── API surface ───────────────────────────────────────────────────────────────
-const api = {
-
-  // Health
-  health: ()          => get("/health"),
-
-  // Dashboard
-  dashboard: ()       => get("/dashboard"),
-
-  // Run control
-  startRun: (opts)    => post("/run/start", opts),
-  stopRun:  ()        => post("/run/stop"),
-  runStatus: ()       => get("/run/status"),
-
-  // Run history
-  getRuns: (limit = 30, offset = 0) =>
-    get(`/runs?limit=${limit}&offset=${offset}`),
-
-  getRun:  (id)       => get(`/runs/${id}`),
-  getRunLogs: (id, level = "ALL") =>
-    get(`/runs/${id}/logs?level=${level}`),
-  getRunFiles: (id, library = "") =>
-    get(`/runs/${id}/files${library ? `?library=${encodeURIComponent(library)}` : ""}`),
-
-  // Config
-  getConfig:    ()      => get("/config"),
-  updateConfig: (data)  => patch("/config", data),
-  addSite:      (site)  => post("/config/sites", site),
-  removeSite:   (name)  => del(`/config/sites/${encodeURIComponent(name)}`),
-
-  // Restore
-  restore: (opts)     => post("/restore", opts),
-
-  // SSD
-  ssdStatus:       ()     => get("/ssd/status"),
-
-  // Watcher  (Phase 3)
-  watcherStatus:   ()     => get("/watcher/status"),
-  watcherStart:    ()     => post("/watcher/start"),
-  watcherStop:     ()     => post("/watcher/stop"),
-
-  // Settings
-  updateSmtp:      (data) => patch("/settings/smtp", data),
-  testSmtp:        ()     => post("/settings/smtp/test"),
-  updateRetention: (data) => patch("/settings/retention", data),
-  runPrune:        ()     => post("/settings/prune"),
+export const api = {
+  get:    (path, params) => request("GET",    path, null, params),
+  post:   (path, body)   => request("POST",   path, body),
+  patch:  (path, body)   => request("PATCH",  path, body),
+  delete: (path)         => request("DELETE", path),
 };
-
-export default api;
-
-// ── Error class ───────────────────────────────────────────────────────────────
-export class ApiError extends Error {
-  constructor(status, message, data = null) {
-    super(message);
-    this.name   = "ApiError";
-    this.status = status;
-    this.data   = data;
-  }
-}

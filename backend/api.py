@@ -1,16 +1,14 @@
 """
-api.py — GhostBackup FastAPI Local IPC Server  (Phase 3: Real-Time Watcher)
+api.py — GhostBackup FastAPI Local IPC Server
 
-Phase 3 additions:
-  - watcher.py (FileWatcher) initialised in lifespan — watches all source folders
-  - /watcher/status  GET  — returns running state + per-source pending/last-trigger info
-  - /watcher/start   POST — enable real-time watching (persisted in config)
-  - /watcher/stop    POST — disable real-time watching
-  - /config/sites POST + DELETE now call watcher.reload_sources() automatically
-  - ConfigUpdateRequest.watcher_enabled added
-
-Phase 2: Local SSD engine (syncer.py, no cloud APIs).
-Phase 1: Auto-start, port kill, tray icon (electron/main.js).
+Fixes applied:
+  - API auth token middleware (validates X-API-Key header)          [FIX-P1]
+  - /health exempt from auth (Electron health-check)               [FIX-P1]
+  - Circuit breaker uses config threshold (default 5%)             [FIX-P3]
+  - Config audit trail wired up (manifest injected into config)    [FIX-P2]
+  - /verify endpoint for periodic backup integrity checks          [FIX-P2]
+  - /config/audit endpoint to view audit trail                     [FIX-P2]
+  - Watcher dispatches use live event loop reference               [FIX-P3]
 """
 
 import asyncio
@@ -23,7 +21,7 @@ from datetime import datetime
 from typing import Optional
 
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -34,7 +32,6 @@ from scheduler import BackupScheduler
 from syncer import LocalSyncer, get_ssd_status
 from watcher import FileWatcher
 
-# ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
@@ -42,7 +39,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("api")
 
-# ── Global state ──────────────────────────────────────────────────────────────
 _config:     Optional[ConfigManager]   = None
 _manifest:   Optional[ManifestDB]      = None
 _scheduler:  Optional[BackupScheduler] = None
@@ -52,7 +48,6 @@ _watcher:    Optional[FileWatcher]     = None
 _active_run: Optional[dict]            = None
 
 
-# ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _config, _manifest, _scheduler, _reporter, _syncer, _watcher
@@ -61,11 +56,14 @@ async def lifespan(app: FastAPI):
 
     _config   = ConfigManager()
     _manifest = ManifestDB()
+
+    # FIX-P2: Wire manifest into config for audit logging
+    _config.set_manifest(_manifest)
+
     _reporter = Reporter(_config)
     _syncer   = LocalSyncer(_config, _manifest)
     _scheduler = BackupScheduler(_config, run_backup_job, reporter=_reporter)
 
-    # Phase 2: desktop notify callback
     async def _desktop_notify(title: str, body: str) -> None:
         import http.client, json
         try:
@@ -82,13 +80,22 @@ async def lifespan(app: FastAPI):
     _scheduler.set_manifest(_manifest)
     _scheduler.start()
 
-    # Phase 3: real-time file watcher — auto-starts if sources are configured
-    _watcher = FileWatcher(_config, run_backup_job, asyncio.get_event_loop())
+    # FIX-P3: Pass live loop to watcher so _dispatch always has a valid reference
+    loop = asyncio.get_event_loop()
+    _watcher = FileWatcher(_config, run_backup_job, loop)
     if _config.get_enabled_sources():
         try:
             _watcher.start()
         except Exception as e:
             logger.warning(f"FileWatcher failed to start: {e}")
+
+    # Log startup encryption status
+    if _syncer._crypto.enabled:
+        logger.info("Backup encryption: ACTIVE")
+    else:
+        logger.warning(
+            "Backup encryption: INACTIVE — set GHOSTBACKUP_ENCRYPTION_KEY to enable"
+        )
 
     logger.info("GhostBackup API ready on http://127.0.0.1:8765")
     yield
@@ -103,7 +110,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="3.0.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="3.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -113,37 +120,62 @@ app.add_middleware(
 )
 
 
+# ── FIX-P1: API auth token middleware ─────────────────────────────────────────
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """
+    Validates X-API-Key header against GHOSTBACKUP_API_TOKEN env var.
+    /health is exempt so Electron can poll before the window is shown.
+    If no token is configured (dev mode), all requests pass through.
+    """
+    # Health check is always public — Electron polls this before showing UI
+    if request.url.path in ("/health", "/docs", "/openapi.json"):
+        return await call_next(request)
+
+    expected_token = os.getenv("GHOSTBACKUP_API_TOKEN", "")
+    if expected_token:
+        provided = request.headers.get("X-API-Key", "")
+        if provided != expected_token:
+            return Response(
+                content='{"detail":"Unauthorized — invalid or missing X-API-Key"}',
+                status_code=401,
+                media_type="application/json",
+            )
+    return await call_next(request)
+
+
 # ── Request / Response Models ─────────────────────────────────────────────────
 
 class RunRequest(BaseModel):
     full:    bool      = False
-    sources: list[str] = []     # empty = all enabled sources
+    sources: list[str] = []
 
 
 class RestoreRequest(BaseModel):
     run_id:      int
-    library:     str              # source_label (UI sends 'library' key)
+    library:     str
     subfolder:   Optional[str] = None
     destination: str
     dry_run:     bool = True
 
 
 class ConfigUpdateRequest(BaseModel):
-    ssd_path:         Optional[str]       = None
-    schedule_time:    Optional[str]       = None
-    timezone:         Optional[str]       = None
-    concurrency:      Optional[int]       = None
-    max_file_size_gb: Optional[int]       = None
-    verify_checksums: Optional[bool]      = None
-    version_count:    Optional[int]       = None
-    exclude_patterns: Optional[list[str]] = None
-    watcher_enabled:  Optional[bool]      = None   # Phase 3
+    ssd_path:              Optional[str]       = None
+    secondary_ssd_path:    Optional[str]       = None
+    schedule_time:         Optional[str]       = None
+    timezone:              Optional[str]       = None
+    concurrency:           Optional[int]       = None
+    max_file_size_gb:      Optional[int]       = None
+    verify_checksums:      Optional[bool]      = None
+    version_count:         Optional[int]       = None
+    exclude_patterns:      Optional[list[str]] = None
+    watcher_enabled:       Optional[bool]      = None
+    circuit_breaker_threshold: Optional[float] = None
 
 
 class SiteRequest(BaseModel):
-    """UI sends this for both add-source and legacy sites."""
     label:   Optional[str] = None
-    name:    Optional[str] = None     # fallback if UI sends 'name'
+    name:    Optional[str] = None
     path:    str
     enabled: bool = True
 
@@ -165,24 +197,12 @@ class RetentionUpdateRequest(BaseModel):
 # ── Core backup job ───────────────────────────────────────────────────────────
 
 async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
-    """
-    Core backup job — runs as a background task.
-    Uses LocalSyncer instead of SharePoint/OneDrive APIs.
-
-    For each source folder:
-      1. scan_source()  — detect changed files via mtime + xxhash
-      2. copy_file()    — chunked copy with .ghosttmp safety + verify
-      3. record_file()  — write to manifest
-
-    Progress is written to _active_run so /run/status streams live to the UI.
-    """
     global _active_run
 
     if _active_run and _active_run.get("status") == "running":
         logger.warning("Backup already running — skipping duplicate trigger")
         return
 
-    # SSD pre-flight check
     ssd_status = _syncer.check_ssd()
     if ssd_status["status"] != "ok":
         err = ssd_status.get("error", "SSD unavailable")
@@ -202,14 +222,14 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
         "status":            "running",
         "started_at":        datetime.utcnow().isoformat(),
         "overall_pct":       0,
-        "libraries":         {},    # key kept as 'libraries' for UI compat
+        "libraries":         {},
         "files_transferred": 0,
         "files_skipped":     0,
         "files_failed":      0,
         "bytes_transferred": 0,
         "errors":            [],
-        "feed":              [],    # last 50 file events for live UI
-        "speed_bps":         0,     # bytes/s rolling estimate
+        "feed":              [],
+        "speed_bps":         0,
     }
 
     try:
@@ -228,7 +248,6 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
         for idx, source in enumerate(target_sources):
             label = source.get("label") or source.get("name", "?")
 
-            # Check source folder exists before scanning
             from pathlib import Path as _Path
             if not _Path(source["path"]).exists():
                 _active_run["errors"].append({
@@ -250,7 +269,6 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
             _manifest.log(run_id, "INFO", f"Scanning {label}: {source['path']}")
 
             try:
-                # Scan for changed files (runs in thread — blocks filesystem)
                 changed_files, skipped = await asyncio.get_event_loop().run_in_executor(
                     executor,
                     lambda s=source, f=full: _syncer.scan_source(s, force_full=f),
@@ -268,7 +286,6 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                 _manifest.log(run_id, "INFO",
                               f"{label}: {total_files} files to copy, {skipped} skipped")
 
-                # Speed tracking
                 _speed_window = {"bytes": 0, "ts": time.monotonic()}
 
                 def _progress_cb(chunk_bytes: int) -> None:
@@ -282,7 +299,6 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                         _speed_window["ts"]    = time.monotonic()
 
                 for f_idx, file_meta in enumerate(changed_files):
-                    # Bail out if run was cancelled via /run/stop
                     if _active_run.get("status") == "cancelled":
                         break
 
@@ -293,9 +309,7 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                                 fm, run_id, on_progress=_progress_cb
                             ),
                         )
-
                         _manifest.record_file(run_id, file_meta, backup_path)
-
                         lib_state["files_transferred"] += 1
                         lib_state["bytes"] += file_meta["size"]
                         _active_run["files_transferred"] += 1
@@ -323,15 +337,13 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                         _manifest.log(run_id, "ERROR",
                                       f"{file_meta['name']}: {err_msg}")
 
-                        # Circuit breaker: >20% failure rate on this source
+                        # FIX-P3: Use configurable circuit breaker threshold (default 5%)
                         fail_rate = lib_state["files_failed"] / max(total_files, 1)
-                        if fail_rate > _config.sources[0].circuit_breaker_threshold \
-                                if _config.sources else fail_rate > 0.20:
-                            pass  # use default 0.20
-                        if fail_rate > 0.20 and lib_state["files_failed"] >= 5:
+                        threshold = _config.circuit_breaker_threshold
+                        if fail_rate > threshold and lib_state["files_failed"] >= 3:
                             logger.error(
                                 f"Circuit breaker tripped: {label} "
-                                f"({fail_rate:.0%} failure)"
+                                f"({fail_rate:.0%} failure, threshold {threshold:.0%})"
                             )
                             lib_state["status"] = "circuit_broken"
                             await _reporter.send_circuit_breaker_alert(
@@ -365,7 +377,6 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
 
         executor.shutdown(wait=False)
 
-        # Final status
         lib_statuses = [v["status"] for v in _active_run["libraries"].values()]
         if not lib_statuses or all(s == "success" for s in lib_statuses):
             final_status = "success"
@@ -380,9 +391,7 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
 
         _manifest.finalize_run(run_id, _active_run)
 
-        # ── Fix 1: retry locked files ─────────────────────────────────────
-        # Collect files that failed with a lock/permission error across all sources
-        # and retry them once at the end of the run (user may have closed the file)
+        # Retry locked files
         locked_retries = [
             e for e in _active_run["errors"]
             if "locked" in e.get("error", "").lower()
@@ -400,7 +409,6 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                 if not src.exists():
                     continue
                 try:
-                    import os as _os
                     stat      = src.stat()
                     file_hash = _syncer._hash_file_direct(src)
                     file_meta = {
@@ -421,16 +429,11 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                     _manifest.record_file(run_id, file_meta, backup_path)
                     _active_run["files_transferred"] += 1
                     _active_run["files_failed"]      -= 1
-                    _active_run["errors"] = [
-                        e for e in _active_run["errors"]
-                        if e.get("original_path") != src_path
-                    ]
                     logger.info(f"Locked file retry succeeded: {src.name}")
                 except Exception as retry_err:
                     logger.warning(f"Locked file retry failed: {src.name} — {retry_err}")
 
-        # ── Fix 2: backup the manifest DB to SSD after every run ──────────
-        # If the host machine dies, the restore map is still on the SSD
+        # Backup manifest DB to SSD after every run
         if _config.ssd_path:
             try:
                 from pathlib import Path as _P
@@ -446,7 +449,6 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
         await _reporter.send_run_report(_active_run)
         logger.info(f"Run #{run_id} complete — {final_status}")
 
-        # Reset missed-backup alert flag so it doesn't re-fire after a recovery
         if final_status == "success" and _scheduler:
             _scheduler._missed_alerted = False
 
@@ -463,24 +465,22 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-# Health
 @app.get("/health")
 async def health():
     return {
         "status":            "ok",
-        "version":           "2.0.0",
+        "version":           "3.1.0",
         "scheduler_running": _scheduler.is_running() if _scheduler else False,
         "next_run":          _scheduler.next_run_time() if _scheduler else None,
+        "encryption_active": _syncer._crypto.enabled if _syncer else False,
     }
 
 
-# SSD status  (new — Phase 2)
 @app.get("/ssd/status")
 async def ssd_status():
     return get_ssd_status(_config.ssd_path)
 
 
-# Dashboard
 @app.get("/dashboard")
 async def dashboard():
     runs = _manifest.get_runs(limit=30)
@@ -489,13 +489,12 @@ async def dashboard():
     return {
         "runs":        runs,
         "last_run":    last,
-        "ssd_storage": ssd,        # renamed from 'storage' — UI updated to match
+        "ssd_storage": ssd,
         "next_run":    _scheduler.next_run_time() if _scheduler else None,
         "active_run":  _active_run,
     }
 
 
-# Run control
 @app.post("/run/start")
 async def start_run(req: RunRequest, background_tasks: BackgroundTasks):
     if _active_run and _active_run.get("status") == "running":
@@ -521,7 +520,6 @@ async def run_status():
     return _active_run
 
 
-# Run history & logs
 @app.get("/runs")
 async def get_runs(limit: int = 30, offset: int = 0):
     return _manifest.get_runs(limit=limit, offset=offset)
@@ -545,7 +543,6 @@ async def get_run_files(run_id: int, library: Optional[str] = None):
     return _manifest.get_files(run_id, library=library)
 
 
-# Config
 @app.get("/config")
 async def get_config():
     return _config.to_dict_safe()
@@ -558,10 +555,8 @@ async def update_config(req: ConfigUpdateRequest):
     _config.update(updates)
     if "schedule_time" in updates or "timezone" in updates:
         _scheduler.reschedule(_config.schedule_time, _config.timezone)
-    # Re-init syncer so new ssd_path / settings take effect immediately
     global _syncer
     _syncer = LocalSyncer(_config, _manifest)
-    # Handle watcher toggle
     if watcher_enabled is True and _watcher and not _watcher._running:
         _watcher.reload_sources()
     elif watcher_enabled is False and _watcher and _watcher._running:
@@ -587,7 +582,12 @@ async def remove_site(site_name: str):
     return {"message": "Source removed"}
 
 
-# Restore  (Phase 2: pure local filesystem)
+# FIX-P2: Config audit trail endpoint
+@app.get("/config/audit")
+async def get_config_audit(limit: int = 100):
+    return _manifest.get_config_audit(limit=limit)
+
+
 @app.post("/restore")
 async def restore(req: RestoreRequest, background_tasks: BackgroundTasks):
     run = _manifest.get_run(req.run_id)
@@ -613,19 +613,16 @@ async def restore(req: RestoreRequest, background_tasks: BackgroundTasks):
             ],
         }
 
-    # Run synchronously so UI knows when restore is actually complete
     loop = asyncio.get_event_loop()
     try:
         result = await loop.run_in_executor(
             None, lambda: _syncer.restore_files(files, req.destination)
         )
-        restored = result.get("restored", 0)
-        failed   = result.get("failed", 0)
         return {
             "dry_run":      False,
-            "message":      f"Restore complete — {restored} files written to {req.destination}",
-            "files_count":  restored,
-            "files_failed": failed,
+            "message":      f"Restore complete — {result.get('restored', 0)} files written to {req.destination}",
+            "files_count":  result.get("restored", 0),
+            "files_failed": result.get("failed", 0),
             "destination":  req.destination,
             "errors":       result.get("errors", []),
         }
@@ -633,7 +630,46 @@ async def restore(req: RestoreRequest, background_tasks: BackgroundTasks):
         raise HTTPException(500, f"Restore failed: {e}")
 
 
-# Settings
+# FIX-P2: Backup verification endpoint
+@app.post("/verify")
+async def verify_backups(background_tasks: BackgroundTasks,
+                         source_label: Optional[str] = None):
+    """
+    Re-reads backed-up files and verifies hashes against the manifest.
+    Run manually or scheduled weekly to catch SSD corruption early.
+    """
+    if _active_run and _active_run.get("status") == "running":
+        raise HTTPException(409, "Cannot verify while a backup is running")
+    background_tasks.add_task(_do_verify, source_label)
+    return {"message": "Verification started", "source": source_label or "all"}
+
+
+async def _do_verify(source_label: Optional[str] = None):
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: _syncer.verify_backups(source_label),
+    )
+    level = "error" if (result["failed"] or result["missing"]) else "info"
+    _reporter.alerts.add(
+        level,
+        "Backup verification complete",
+        f"{result['verified']} OK, {result['failed']} corrupt, {result['missing']} missing.",
+    )
+    if result["failed"] or result["missing"]:
+        await _reporter.alert_and_notify(
+            level="error",
+            title="Backup integrity issue detected",
+            body=(
+                f"{result['failed']} file(s) have hash mismatches and may be corrupt. "
+                f"{result['missing']} file(s) are missing from SSD. "
+                "Run a full backup immediately."
+            ),
+            send_email=True,
+        )
+    logger.info(f"Verification done — {result}")
+
+
 @app.patch("/settings/smtp")
 async def update_smtp(req: SmtpUpdateRequest):
     _config.update_smtp(req.model_dump(exclude_none=True))
@@ -651,10 +687,11 @@ async def test_smtp():
 
 @app.patch("/settings/retention")
 async def update_retention(req: RetentionUpdateRequest):
-    if req.guard_days < 7:
-        raise HTTPException(400, "Safety guard window cannot be less than 7 days")
-    _config.update_retention(req.model_dump())
-    return {"message": "Retention policy updated"}
+    try:
+        _config.update_retention(req.model_dump())
+        return {"message": "Retention policy updated"}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/settings/prune")
@@ -682,11 +719,8 @@ async def _do_prune():
     )
 
 
-# ── Phase 3: Watcher endpoints ───────────────────────────────────────────────
-
 @app.get("/watcher/status")
 async def watcher_status():
-    """Return current watcher state — polled by the Settings UI card."""
     if not _watcher:
         return {"running": False, "sources": [], "error": "Watcher not initialised"}
     return _watcher.status()
@@ -714,7 +748,6 @@ async def watcher_stop():
     return {"message": "Watcher stopped"}
 
 
-# ── Alerts ────────────────────────────────────────────────────────────────────
 @app.get("/alerts")
 async def get_alerts(include_dismissed: bool = False):
     return {
@@ -737,7 +770,6 @@ async def dismiss_all_alerts():
     return {"dismissed": count, "unread_count": 0}
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     uvicorn.run(
         "api:app",
