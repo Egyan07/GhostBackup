@@ -1,0 +1,57 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #0d0f12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-family: monospace;
+  color: #e8eaf0;
+}
+
+.splash { text-align: center; }
+
+.logo {
+  font-size: 32px;
+  font-weight: 800;
+  color: #00e5cc;
+  letter-spacing: -1px;
+  font-family: 'Syne', sans-serif;
+}
+
+.sub {
+  font-size: 11px;
+  color: #555;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+.status {
+  font-size: 11px;
+  color: #8892a4;
+  margin-top: 32px;
+}
+
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00e5cc;
+  margin-right: 6px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+.error {
+  color: #ff4757;
+  margin-top: 16px;
+  font-size: 12px;
+  max-width: 400px;
+}
