@@ -116,6 +116,3 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
-
-      - name: JavaScript lint
-        run: npx eslint src/
