@@ -196,6 +196,15 @@ function startNotifyServer() {
       res.end();
       return;
     }
+
+    // Validate API token — only the backend should send notifications
+    const token = req.headers["x-api-key"];
+    if (token !== API_TOKEN) {
+      res.writeHead(401);
+      res.end("Unauthorized");
+      return;
+    }
+
     let body = "";
     req.on("data", (chunk) => { body += chunk; });
     req.on("end", () => {
@@ -426,7 +435,7 @@ function createTray() {
         },
       },
       { type: "separator" },
-      {
+      ...(IS_WIN ? [{
         label: startupEnabled ? "✓ Start with Windows" : "Start with Windows",
         click: () => {
           if (isRegisteredInStartup()) {
@@ -444,7 +453,7 @@ function createTray() {
           }
           rebuildMenu();
         },
-      },
+      }] : []),
       { type: "separator" },
       {
         label: "Quit GhostBackup",

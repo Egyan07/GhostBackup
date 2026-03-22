@@ -11,7 +11,7 @@ import logging
 import socket
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -117,6 +117,10 @@ class ManifestDB:
                 CREATE INDEX IF NOT EXISTS idx_hashes_path    ON file_hashes(source_path);
                 CREATE INDEX IF NOT EXISTS idx_audit_ts       ON config_audit(changed_at DESC);
             """)
+            # Ensure schema_version is populated
+            row = self._conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()
+            if row[0] == 0:
+                self._conn.execute("INSERT INTO schema_version (version) VALUES (1)")
             self._conn.commit()
 
     # ── Run lifecycle ─────────────────────────────────────────────────────────
@@ -125,7 +129,7 @@ class ManifestDB:
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO runs (started_at, status, full_backup) VALUES (?, 'running', ?)",
-                (datetime.utcnow().isoformat(), int(full_backup)),
+                (datetime.now(timezone.utc).isoformat(), int(full_backup)),
             )
             self._conn.commit()
             run_id = cur.lastrowid
@@ -134,7 +138,7 @@ class ManifestDB:
 
     def finalize_run(self, run_id: int, run_state: dict) -> None:
         started_at  = run_state.get("started_at", "")
-        finished_at = run_state.get("finished_at", datetime.utcnow().isoformat())
+        finished_at = run_state.get("finished_at", datetime.now(timezone.utc).isoformat())
         status      = run_state.get("status", "unknown")
         try:
             dur = int((
@@ -209,7 +213,7 @@ class ManifestDB:
                     file_meta.get("size", 0),
                     file_meta.get("xxhash", ""),
                     file_meta.get("mtime"),
-                    datetime.utcnow().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                 ),
             )
             self._conn.commit()
@@ -236,7 +240,7 @@ class ManifestDB:
                      mtime        = excluded.mtime,
                      size         = excluded.size,
                      backed_up_at = excluded.backed_up_at""",
-                (source_path, xxhash, mtime, size, datetime.utcnow().isoformat()),
+                (source_path, xxhash, mtime, size, datetime.now(timezone.utc).isoformat()),
             )
             self._conn.commit()
 
@@ -248,15 +252,9 @@ class ManifestDB:
         """
         with self._lock:
             if source_path_prefix:
-                escaped = (
-                    source_path_prefix
-                    .replace("\\", "\\\\")
-                    .replace("%", "\\%")
-                    .replace("_", "\\_")
-                )
                 cur = self._conn.execute(
                     "DELETE FROM file_hashes WHERE source_path LIKE ? ESCAPE '\\'",
-                    (f"{escaped}%",),
+                    (f"{_escape_like(source_path_prefix)}%",),
                 )
             else:
                 cur = self._conn.execute("DELETE FROM file_hashes")
@@ -311,7 +309,7 @@ class ManifestDB:
                 """INSERT INTO config_audit (changed_at, field, old_value, new_value, machine)
                    VALUES (?, ?, ?, ?, ?)""",
                 (
-                    datetime.utcnow().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                     field,
                     json.dumps(old_value) if old_value is not None else None,
                     json.dumps(new_value),
@@ -334,7 +332,7 @@ class ManifestDB:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO logs (run_id, logged_at, level, message) VALUES (?,?,?,?)",
-                (run_id, datetime.utcnow().isoformat(), level.upper(), message),
+                (run_id, datetime.now(timezone.utc).isoformat(), level.upper(), message),
             )
             self._conn.commit()
 

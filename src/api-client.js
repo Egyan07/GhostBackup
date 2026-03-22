@@ -137,6 +137,7 @@ export const api = {
 
   // Config
   getConfig:       ()            => request("GET",    "/config"),
+  resetConfig:     ()            => request("POST",   "/config/reset"),
   updateConfig:    (body)        => request("PATCH",  "/config", body),
   addSite:         (body)        => request("POST",   "/config/sites", body),
   updateSite:      (name, body)  => request("PATCH",  `/config/sites/${encodeURIComponent(name)}`, body),

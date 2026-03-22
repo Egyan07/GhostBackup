@@ -13,10 +13,11 @@ import json
 import logging
 import os
 import shutil
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -48,6 +49,7 @@ _syncer:     Optional[LocalSyncer]     = None
 _watcher:    Optional[FileWatcher]     = None
 _active_run:      Optional[dict]            = None
 _active_run_lock: asyncio.Lock              = asyncio.Lock()
+_run_mutex:       threading.Lock            = threading.Lock()  # protects _active_run mutations from thread pool
 
 
 async def _desktop_notify(title: str, body: str) -> None:
@@ -57,7 +59,10 @@ async def _desktop_notify(title: str, body: str) -> None:
         conn.request(
             "POST", "/notify",
             body=json.dumps({"title": title, "body": body}),
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "X-API-Key": os.getenv("GHOSTBACKUP_API_TOKEN", ""),
+            },
         )
         conn.getresponse()
         conn.close()
@@ -111,11 +116,11 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="3.1.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "file://", "null"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "file://"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -208,7 +213,7 @@ def _new_run_state(run_id: int, full: bool) -> dict:
     return {
         "run_id":            run_id,
         "status":            "running",
-        "started_at":        datetime.utcnow().isoformat(),
+        "started_at":        datetime.now(timezone.utc).isoformat(),
         "overall_pct":       0,
         "libraries":         {},
         "files_transferred": 0,
@@ -290,7 +295,8 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                         executor,
                         lambda s=source, f=full: _syncer.scan_source(s, force_full=f),
                     )
-                    _active_run["files_skipped"] += skipped
+                    with _run_mutex:
+                        _active_run["files_skipped"] += skipped
                     total_files = len(changed_files)
 
                     if total_files == 0:
@@ -306,14 +312,15 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                     speed_window = {"bytes": 0, "ts": time.monotonic()}
 
                     def _progress_cb(chunk_bytes: int) -> None:
-                        speed_window["bytes"] += chunk_bytes
-                        elapsed = time.monotonic() - speed_window["ts"]
-                        if elapsed >= 1.0:
-                            _active_run["speed_bps"] = int(
-                                speed_window["bytes"] / elapsed
-                            )
-                            speed_window["bytes"] = 0
-                            speed_window["ts"]    = time.monotonic()
+                        with _run_mutex:
+                            speed_window["bytes"] += chunk_bytes
+                            elapsed = time.monotonic() - speed_window["ts"]
+                            if elapsed >= 1.0:
+                                _active_run["speed_bps"] = int(
+                                    speed_window["bytes"] / elapsed
+                                )
+                                speed_window["bytes"] = 0
+                                speed_window["ts"]    = time.monotonic()
 
                     for f_idx, file_meta in enumerate(changed_files):
                         if _active_run.get("status") == "cancelled":
@@ -327,34 +334,36 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                                 ),
                             )
                             _manifest.record_file(run_id, file_meta, backup_path)
-                            lib_state["files_transferred"] += 1
-                            lib_state["bytes"] += file_meta["size"]
-                            _active_run["files_transferred"] += 1
-                            _active_run["bytes_transferred"] += file_meta["size"]
+                            with _run_mutex:
+                                lib_state["files_transferred"] += 1
+                                lib_state["bytes"] += file_meta["size"]
+                                _active_run["files_transferred"] += 1
+                                _active_run["bytes_transferred"] += file_meta["size"]
 
-                            feed_event = {
-                                "time":         datetime.utcnow().strftime("%H:%M:%S"),
-                                "file":         file_meta["name"],
-                                "size_mb":      round(file_meta["size"] / (1024 * 1024), 2),
-                                "library":      label,
-                                "checksum_ok":  True,
-                            }
-                            _active_run["feed"] = [feed_event] + _active_run["feed"][:49]
+                                feed_event = {
+                                    "time":         datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                                    "file":         file_meta["name"],
+                                    "size_mb":      round(file_meta["size"] / (1024 * 1024), 2),
+                                    "library":      label,
+                                    "checksum_ok":  True,
+                                }
+                                _active_run["feed"] = [feed_event] + _active_run["feed"][:49]
 
                         except Exception as file_err:
                             err_msg = str(file_err)
                             logger.error(
                                 f"[{label}] File failed: {file_meta['name']} — {err_msg}"
                             )
-                            lib_state["files_failed"]      += 1
-                            _active_run["files_failed"]    += 1
-                            _active_run["errors"].append({
-                                "file":          file_meta["name"],
-                                "library":       label,
-                                "error":         err_msg,
-                                "original_path": file_meta.get("original_path"),
-                                "file_meta":     dict(file_meta),
-                            })
+                            with _run_mutex:
+                                lib_state["files_failed"]      += 1
+                                _active_run["files_failed"]    += 1
+                                _active_run["errors"].append({
+                                    "file":          file_meta["name"],
+                                    "library":       label,
+                                    "error":         err_msg,
+                                    "original_path": file_meta.get("original_path"),
+                                    "file_meta":     dict(file_meta),
+                                })
                             _manifest.log(run_id, "ERROR",
                                           f"{file_meta['name']}: {err_msg}")
 
@@ -373,12 +382,13 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                                 )
                                 break
 
-                        lib_state["pct"] = round(
-                            (f_idx + 1) / max(total_files, 1) * 100
-                        )
-                        _active_run["overall_pct"] = round(
-                            ((idx + lib_state["pct"] / 100) / total_sources) * 100
-                        )
+                        with _run_mutex:
+                            lib_state["pct"] = round(
+                                (f_idx + 1) / max(total_files, 1) * 100
+                            )
+                            _active_run["overall_pct"] = round(
+                                ((idx + lib_state["pct"] / 100) / total_sources) * 100
+                            )
 
                     if lib_state["status"] not in ("circuit_broken", "failed", "cancelled"):
                         lib_state["status"] = (
@@ -398,7 +408,7 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                     _manifest.log(run_id, "ERROR", f"{label}: {lib_err}")
 
         finally:
-            executor.shutdown(wait=False)
+            executor.shutdown(wait=True, cancel_futures=True)
 
         lib_statuses = [v["status"] for v in _active_run["libraries"].values()]
         if not lib_statuses or all(s == "success" for s in lib_statuses):
@@ -408,9 +418,10 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
         else:
             final_status = "partial"
 
-        _active_run["status"]      = final_status
-        _active_run["overall_pct"] = 100
-        _active_run["finished_at"] = datetime.utcnow().isoformat()
+        with _run_mutex:
+            _active_run["status"]      = final_status
+            _active_run["overall_pct"] = 100
+            _active_run["finished_at"] = datetime.now(timezone.utc).isoformat()
 
         _manifest.finalize_run(run_id, _active_run)
 
@@ -425,8 +436,9 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
 
     except Exception as fatal_err:
         logger.error(f"Fatal backup error: {fatal_err}", exc_info=True)
-        _active_run["status"]      = "failed"
-        _active_run["finished_at"] = datetime.utcnow().isoformat()
+        with _run_mutex:
+            _active_run["status"]      = "failed"
+            _active_run["finished_at"] = datetime.now(timezone.utc).isoformat()
         _manifest.finalize_run(run_id, _active_run)
         await _reporter.alert_and_notify(
             level="critical", title="GhostBackup fatal error",
@@ -482,10 +494,11 @@ async def _retry_locked_files(run_id: int) -> None:
                 None, lambda fm=file_meta: _syncer.copy_file(fm, run_id)
             )
             _manifest.record_file(run_id, file_meta, backup_path)
-            _active_run["files_transferred"] += 1
-            _active_run["files_failed"] = max(_active_run["files_failed"] - 1, 0)
-            err_entry["retried"] = True
-            err_entry["retry_succeeded"] = True
+            with _run_mutex:
+                _active_run["files_transferred"] += 1
+                _active_run["files_failed"] = max(_active_run["files_failed"] - 1, 0)
+                err_entry["retried"] = True
+                err_entry["retry_succeeded"] = True
             logger.info(f"Locked file retry succeeded: {file_meta.get('name', src_path)}")
         except Exception as retry_err:
             err_entry["retried"] = True
@@ -512,7 +525,7 @@ async def _backup_manifest_to_ssd() -> None:
 async def health():
     return {
         "status":            "ok",
-        "version":           "3.1.0",
+        "version":           "2.0.0",
         "scheduler_running": _scheduler.is_running() if _scheduler else False,
         "next_run":          _scheduler.next_run_time() if _scheduler else None,
         "schedule": {
@@ -561,7 +574,7 @@ async def stop_run():
     if not _active_run or _active_run.get("status") != "running":
         raise HTTPException(400, "No active run to stop")
     _active_run["status"]      = "cancelled"
-    _active_run["finished_at"] = datetime.utcnow().isoformat()
+    _active_run["finished_at"] = datetime.now(timezone.utc).isoformat()
     return {"message": "Run cancellation requested"}
 
 
@@ -622,6 +635,19 @@ async def add_site(req: SiteRequest):
     if _watcher:
         _watcher.reload_sources()
     return {"message": "Source added", "source": source, "config": _config.to_dict_safe()}
+
+
+@app.post("/config/reset")
+async def reset_config():
+    """Reset all configuration to factory defaults."""
+    if not _config:
+        raise HTTPException(500, "Config not initialised")
+    _config.reset_to_defaults()
+    if _scheduler:
+        _scheduler.reschedule(_config.schedule_time, _config.timezone)
+    if _watcher and _watcher._running:
+        _watcher.stop()
+    return {"message": "Configuration reset to defaults", "config": _config.to_dict_safe()}
 
 
 @app.patch("/config/sites/{site_name}")

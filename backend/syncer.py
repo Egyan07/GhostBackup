@@ -10,8 +10,9 @@ import fnmatch
 import logging
 import os
 import shutil
+import struct
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -25,36 +26,69 @@ logger = logging.getLogger("syncer")
 
 WIN_PATH_PREFIX = "\\\\?\\"
 
-# Warn (but do not block) when encrypting files larger than this threshold.
-# Fernet loads the entire file into memory; very large files risk OOM on
-# low-RAM machines. The config's max_file_size_gb guard is the hard limit.
-_LARGE_FILE_WARN_BYTES = 200 * 1024 * 1024  # 200 MB
+# ── Streaming encryption constants ────────────────────────────────────────────
+_STREAM_MAGIC = b"GBENC1"   # header identifying the streaming AES-GCM format
+_NONCE_SIZE = 12             # AES-GCM standard nonce length
+_LEN_SIZE = 4                # uint32 big-endian chunk ciphertext length
 
 
 # ── Encryption helper ─────────────────────────────────────────────────────────
 
 class _CryptoHelper:
     """
-    Transparent Fernet encryption/decryption for backup files.
-    Operates as a no-op when no encryption key is configured so that
-    unencrypted and encrypted deployments share the same code path.
+    AES-256-GCM streaming encryption/decryption for backup files.
+
+    New backups are encrypted in fixed-size chunks so memory usage stays
+    constant regardless of file size.  Legacy Fernet-encrypted files are
+    detected automatically and decrypted transparently.
     """
 
     def __init__(self, key: Optional[bytes]):
         self._fernet = None
+        self._aesgcm = None
         if key:
             try:
+                import base64
                 from cryptography.fernet import Fernet
+                from cryptography.hazmat.primitives import hashes
+                from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+                from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+                # Keep Fernet instance for decrypting legacy backup files
                 self._fernet = Fernet(key)
-                logger.info("Backup encryption: ENABLED (Fernet/AES-128-CBC)")
+
+                # Derive a 256-bit AES key from the Fernet key material
+                raw_key = base64.urlsafe_b64decode(key)
+                derived = HKDF(
+                    algorithm=hashes.SHA256(),
+                    length=32,
+                    salt=b"ghostbackup-stream-v1",
+                    info=b"aesgcm-encrypt",
+                ).derive(raw_key)
+                self._aesgcm = AESGCM(derived)
+
+                logger.info("Backup encryption: ENABLED (AES-256-GCM streaming)")
             except Exception as e:
                 logger.error(
                     f"Failed to initialise encryption: {e} — backups will be UNENCRYPTED"
                 )
+                self._fernet = None
+                self._aesgcm = None
 
     @property
     def enabled(self) -> bool:
-        return self._fernet is not None
+        return self._aesgcm is not None
+
+    @staticmethod
+    def _is_stream_format(path: Path) -> bool:
+        """Return True if the file starts with the streaming format header."""
+        try:
+            with open(path, "rb") as f:
+                return f.read(len(_STREAM_MAGIC)) == _STREAM_MAGIC
+        except OSError:
+            return False
+
+    # ── Encrypt (streaming, constant memory) ──────────────────────────────
 
     def encrypt_chunks(
         self,
@@ -63,24 +97,77 @@ class _CryptoHelper:
         chunk_bytes: int,
         on_progress: Optional[Callable] = None,
     ) -> None:
-        """Read src, encrypt with Fernet, write to dst as a single token."""
-        file_size = src_path.stat().st_size
-        if file_size > _LARGE_FILE_WARN_BYTES:
-            logger.warning(
-                f"Encrypting large file ({file_size / (1024**2):.0f} MB): {src_path.name} "
-                f"— this requires reading the full file into memory."
-            )
-        with open(src_path, "rb") as f:
-            plaintext = f.read()
-        if on_progress:
-            on_progress(len(plaintext))
-        dst_path.write_bytes(self._fernet.encrypt(plaintext))
+        """Encrypt *src_path* to *dst_path* using AES-256-GCM in fixed-size chunks."""
+        with open(src_path, "rb") as fin, open(dst_path, "wb") as fout:
+            fout.write(_STREAM_MAGIC)
+            while True:
+                plaintext = fin.read(chunk_bytes)
+                if not plaintext:
+                    fout.write(struct.pack(">I", 0))  # end-of-stream marker
+                    break
+                nonce = os.urandom(_NONCE_SIZE)
+                ciphertext = self._aesgcm.encrypt(nonce, plaintext, None)
+                fout.write(struct.pack(">I", len(ciphertext)))
+                fout.write(nonce)
+                fout.write(ciphertext)
+                if on_progress:
+                    on_progress(len(plaintext))
+
+    # ── Decrypt (auto-detects streaming vs legacy Fernet) ─────────────────
 
     def decrypt_to(self, src_path: Path, dst_path: Path) -> None:
-        """Decrypt a backup file to dst_path for restore."""
-        dst_path.write_bytes(self._fernet.decrypt(src_path.read_bytes()))
+        """Decrypt a backup file to *dst_path*, auto-detecting format."""
+        if self._is_stream_format(src_path):
+            self._decrypt_stream(src_path, dst_path)
+        else:
+            # Legacy Fernet format — must load entire file
+            dst_path.write_bytes(self._fernet.decrypt(src_path.read_bytes()))
+
+    def _decrypt_stream(self, src_path: Path, dst_path: Path) -> None:
+        with open(src_path, "rb") as fin, open(dst_path, "wb") as fout:
+            magic = fin.read(len(_STREAM_MAGIC))
+            if magic != _STREAM_MAGIC:
+                raise ValueError("Invalid GhostBackup encrypted file header")
+            while True:
+                hdr = fin.read(_LEN_SIZE)
+                if len(hdr) < _LEN_SIZE:
+                    raise ValueError("Truncated encrypted file")
+                ct_len = struct.unpack(">I", hdr)[0]
+                if ct_len == 0:
+                    break
+                nonce = fin.read(_NONCE_SIZE)
+                if len(nonce) < _NONCE_SIZE:
+                    raise ValueError("Truncated nonce in encrypted file")
+                ciphertext = fin.read(ct_len)
+                if len(ciphertext) < ct_len:
+                    raise ValueError("Truncated chunk in encrypted file")
+                fout.write(self._aesgcm.decrypt(nonce, ciphertext, None))
+
+    # ── Streaming verify (decrypt + hash without buffering entire file) ───
+
+    def decrypt_and_hash(self, path: Path) -> str:
+        """Decrypt and return the xxHash of the plaintext (constant memory)."""
+        h = xxhash.xxh64()
+        if self._is_stream_format(path):
+            with open(path, "rb") as fin:
+                fin.read(len(_STREAM_MAGIC))  # skip header
+                while True:
+                    hdr = fin.read(_LEN_SIZE)
+                    if len(hdr) < _LEN_SIZE:
+                        raise ValueError("Truncated encrypted file")
+                    ct_len = struct.unpack(">I", hdr)[0]
+                    if ct_len == 0:
+                        break
+                    nonce = fin.read(_NONCE_SIZE)
+                    ciphertext = fin.read(ct_len)
+                    h.update(self._aesgcm.decrypt(nonce, ciphertext, None))
+        else:
+            # Legacy Fernet — must load whole file (unavoidable for old backups)
+            h.update(self._fernet.decrypt(path.read_bytes()))
+        return h.hexdigest()
 
     def decrypt_bytes(self, data: bytes) -> bytes:
+        """Decrypt in-memory Fernet token (legacy compatibility)."""
         return self._fernet.decrypt(data)
 
 
@@ -288,6 +375,7 @@ class LocalSyncer:
         run_id: int,
         on_progress: Optional[Callable[[int], None]] = None,
         dest_root_override: Optional[Path] = None,
+        _skip_secondary: bool = False,
     ) -> str:
         """
         Copy a single file to the SSD, encrypting if a key is configured.
@@ -331,8 +419,7 @@ class LocalSyncer:
 
         if self._config.verify_checksums:
             if self._crypto.enabled:
-                decrypted = self._crypto.decrypt_bytes(dest.read_bytes())
-                dest_hash = _hash_bytes(decrypted)
+                dest_hash = self._crypto.decrypt_and_hash(dest)
             else:
                 dest_hash = _hash_file(dest, chunk)
             if dest_hash != file_meta["xxhash"]:
@@ -354,12 +441,13 @@ class LocalSyncer:
             file_meta["size"],
         )
 
-        if self._config.secondary_ssd_path:
+        if self._config.secondary_ssd_path and not _skip_secondary:
             try:
                 self.copy_file(
                     file_meta, run_id,
                     on_progress=None,
                     dest_root_override=Path(self._config.secondary_ssd_path),
+                    _skip_secondary=True,
                 )
             except Exception as sec_err:
                 logger.warning(f"Secondary SSD copy failed for {src.name}: {sec_err}")
@@ -473,9 +561,7 @@ class LocalSyncer:
 
                 try:
                     if self._crypto.enabled:
-                        actual_hash = _hash_bytes(
-                            self._crypto.decrypt_bytes(bp_path.read_bytes())
-                        )
+                        actual_hash = self._crypto.decrypt_and_hash(bp_path)
                     else:
                         actual_hash = _hash_file(bp_path, chunk)
 
@@ -512,8 +598,8 @@ class LocalSyncer:
         weekly_days: int,
         guard_days: int,
     ) -> int:
-        guard_cutoff = datetime.utcnow() - timedelta(days=guard_days)
-        daily_cutoff = datetime.utcnow() - timedelta(days=daily_days)
+        guard_cutoff = datetime.now(timezone.utc) - timedelta(days=guard_days)
+        daily_cutoff = datetime.now(timezone.utc) - timedelta(days=daily_days)
         removed      = 0
 
         for source in self._config.get_enabled_sources():
@@ -523,7 +609,7 @@ class LocalSyncer:
             )
             for f in old_files:
                 backed_up = datetime.fromisoformat(
-                    f.get("started_at", datetime.utcnow().isoformat())
+                    f.get("started_at", datetime.now(timezone.utc).isoformat())
                 )
                 if backed_up > guard_cutoff:
                     continue

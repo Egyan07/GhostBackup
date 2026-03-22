@@ -16,9 +16,10 @@ export default function LiveRun() {
 
   useEffect(() => {
     poll();
-    const id = setInterval(poll, 1000);
+    // Poll every 1s during active runs, every 5s when idle
+    const id = setInterval(poll, status?.status === "running" ? 1000 : 5000);
     return () => clearInterval(id);
-  }, [poll]);
+  }, [poll, status?.status]);
 
   const startRun = async (full = false) => {
     setStarting(true); setError(null);

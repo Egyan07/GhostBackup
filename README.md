@@ -34,7 +34,7 @@ SQLite Database
 
 | Feature                     | Description                                           |
 | --------------------------- | ----------------------------------------------------- |
-| 🔐 Encryption at Rest       | Fernet encryption (AES-128-CBC + HMAC authentication) |
+| 🔐 Encryption at Rest       | AES-256-GCM streaming encryption (constant memory)    |
 | 🔒 API Security             | Auto-generated session API tokens                     |
 | 📜 Compliance Retention     | Built-in retention policy enforcement                 |
 | 💾 3-2-1 Backup Strategy    | Primary and secondary storage support                 |
@@ -79,7 +79,7 @@ Full step-by-step instructions are available in **SETUP.md**.
 │ 👁️ File Watcher                                             │
 │                                                             │
 │ Backup Engine                                               │
-│  ├─ 🔐 Encrypt files (Fernet)                               │
+│  ├─ 🔐 Encrypt files (AES-256-GCM streaming)                 │
 │  ├─ 💾 Copy to primary and secondary drives                 │
 │  ├─ ✅ Verify integrity using xxhash                        │
 │  └─ 📚 Log results to SQLite                                │
@@ -127,7 +127,7 @@ All endpoints require the **X-API-Key header** except `/health`.
 | POST   | /settings/smtp/test                       | Send test email                    |
 | PATCH  | /settings/retention                       | Update retention policy            |
 | POST   | /settings/prune                           | Run prune job                      |
-| POST   | /settings/encryption/generate-key         | Generate new Fernet encryption key |
+| POST   | /settings/encryption/generate-key         | Generate new encryption key         |
 | GET    | /watcher/status                           | File watcher status                |
 | POST   | /watcher/start                            | Start file watcher                 |
 | POST   | /watcher/stop                             | Stop file watcher                  |
@@ -264,7 +264,7 @@ GhostBackup/
 
 | Layer              | Implementation                               |
 | ------------------ | -------------------------------------------- |
-| Encryption         | Fernet (AES-128-CBC + HMAC)                  |
+| Encryption         | AES-256-GCM streaming (legacy Fernet compat) |
 | API Authentication | Session-based API tokens                     |
 | Database Safety    | SQLite with `PRAGMA synchronous=FULL`        |
 | Process Safety     | Process name verification before termination |
@@ -313,6 +313,32 @@ MIT License
 ---
 
 # 📋 Changelog
+
+## v2.1.0 — Security Fixes, Streaming Encryption & Production Hardening
+
+### Critical Fixes
+- **Streaming AES-256-GCM encryption** (`syncer.py`): replaced Fernet's whole-file-in-memory encryption with chunked AES-256-GCM streaming — memory usage is now constant regardless of file size. Legacy Fernet-encrypted backups are auto-detected and decrypted transparently.
+- **Thread-safe `_active_run` mutations** (`api.py`): added `threading.Lock` around all compound operations (`+=`, `.append()`, multi-field updates) on the shared run state dict, eliminating data races between the progress callback (executor thread) and the event loop thread.
+
+### Important Fixes
+- **`datetime.utcnow()` replaced** (`manifest.py`, `api.py`, `syncer.py`): all deprecated `datetime.utcnow()` calls replaced with `datetime.now(timezone.utc)` for Python 3.12+ compatibility and correct timezone handling.
+- **CI lint job fixed** (`ci.yml`): removed duplicate flake8 step, restored ESLint for JavaScript linting.
+- **Secondary SSD infinite-recursion guard** (`syncer.py`): added `_skip_secondary` parameter to `copy_file()` to prevent recursive secondary copy from triggering another secondary copy.
+- **Notification server authenticated** (`main.js`, `api.py`): the HTTP notification server on port 8766 now validates the `X-API-Key` header — only the backend can trigger desktop notifications.
+- **`ThreadPoolExecutor` shutdown** (`api.py`): changed from `shutdown(wait=False)` to `shutdown(wait=True, cancel_futures=True)` so in-flight copies are cancelled promptly on abort.
+- **Version strings aligned** (`api.py`, `package.json`): all version references now consistently report `2.0.0`.
+- **CORS `"null"` origin removed** (`api.py`): removed unnecessary `"null"` from allowed CORS origins.
+
+### Minor Fixes
+- **`schema_version` table populated** (`manifest.py`): the migration now inserts an initial schema version for future upgrade detection.
+- **Retention UI max corrected** (`Settings.jsx`): `weekly_days` input max raised from 1825 to 3650 to accommodate the 7-year (2555-day) compliance default.
+- **Electron-builder config paths fixed** (`package.json`): `config/**/*` updated to `backend/config/**/*` since the root `config/` directory was removed in v2.0.0.
+- **Duplicate LIKE escaping consolidated** (`manifest.py`): `clear_file_hashes` now uses the shared `_escape_like()` helper instead of reimplementing the same logic.
+- **"Start with Windows" hidden on non-Windows** (`main.js`): the tray menu item is now only shown on Windows.
+- **Adaptive LiveRun polling** (`LiveRun.jsx`): polls every 1s during active runs, every 5s when idle (saves battery on laptops).
+- **Encryption description updated** (`Settings.jsx`): UI now correctly states "AES-256-GCM streaming" instead of "AES-128 (Fernet)".
+
+---
 
 ## v2.0.0 — Architecture Overhaul, Security Hardening & Full Test Suite
 

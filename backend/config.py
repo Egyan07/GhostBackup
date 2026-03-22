@@ -319,6 +319,12 @@ class ConfigManager:
 
     # ── Updates ───────────────────────────────────────────────────────────────
 
+    def reset_to_defaults(self) -> None:
+        """Reset all configuration to factory defaults and persist to disk."""
+        self._data = deepcopy(DEFAULTS)
+        self._save()
+        logger.info("Configuration reset to factory defaults")
+
     def update(self, updates: dict) -> None:
         """
         Apply a flat update dict and log each changed field to the audit trail.

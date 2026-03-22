@@ -225,7 +225,7 @@ export default function Settings() {
         <div className="grid-3 mb-16">
           {[
             { k: "daily_days",  label: "Keep daily backups",    min: 7,  max: 365  },
-            { k: "weekly_days", label: "Keep weekly snapshots", min: 30, max: 1825 },
+            { k: "weekly_days", label: "Keep weekly snapshots", min: 2555, max: 3650 },
             { k: "guard_days",  label: "Safety guard window",   min: 7,  max: 30   },
           ].map(f => (
             <div className="fg" style={{ marginBottom: 0 }} key={f.k}>
@@ -264,7 +264,7 @@ export default function Settings() {
           <span>🔑</span> Encryption
         </div>
         <div className="text-sm text-secondary mb-16" style={{ lineHeight: 1.6 }}>
-          GhostBackup encrypts all backup files with AES-128 (Fernet). The key lives exclusively in
+          GhostBackup encrypts all backup files with AES-256-GCM (streaming). The key lives exclusively in
           <code style={{ fontFamily: "var(--font-mono)", fontSize: 12, background: "var(--bg-raised)", padding: "1px 5px", borderRadius: 3, margin: "0 4px" }}>.env.local</code>
           and is never written to disk or sent over the network.
         </div>
@@ -309,7 +309,7 @@ export default function Settings() {
         <div style={{ fontWeight: 700, color: "var(--red)", marginBottom: 6 }}>Danger Zone</div>
         <div className="text-sm text-secondary mb-12">These actions are irreversible. Proceed with caution.</div>
         <button className="btn btn-danger btn-sm"
-          onClick={() => { if (confirm("Reset all config to defaults? This cannot be undone.")) api.updateConfig({}); }}>
+          onClick={() => { if (confirm("Reset all config to defaults? This cannot be undone.\n\nBackup files on the SSD will not be deleted — only app configuration is reset.")) api.resetConfig().then(() => window.location.reload()); }}>
           Reset All Configuration
         </button>
         <div className="text-xs text-tertiary mt-8">Note: Backup files on the SSD will not be deleted — only app configuration is reset.</div>

@@ -1,6 +1,6 @@
 {
   "name": "ghostbackup",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "SharePoint daily auto-backup system for Red Parrot Accounting",
   "author": "Egyan <egyan@redparrot.co.uk>",
   "private": true,
@@ -45,7 +45,7 @@
       "dist/**/*",
       "electron/**/*",
       "backend/**/*",
-      "config/**/*",
+      "backend/config/**/*",
       "assets/**/*",
       "package.json"
     ],
@@ -56,7 +56,7 @@
         "filter": ["**/*"]
       },
       {
-        "from": "config",
+        "from": "backend/config",
         "to":   "config",
         "filter": ["**/*"]
       }

@@ -15,7 +15,7 @@ PyYAML==6.0.1
 xxhash==3.4.1          # ~10 GB/s file hashing for change detection
 psutil==5.9.8          # disk usage stats, filesystem type
 
-# Encryption at rest (AES-128-CBC via Fernet — required for accounting data compliance)
+# Encryption at rest (AES-256-GCM streaming + Fernet legacy — accounting data compliance)
 cryptography==42.0.5
 
 # File watching (real-time sync)
