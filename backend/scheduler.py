@@ -235,7 +235,10 @@ class BackupScheduler:
                 return
 
             last_dt   = datetime.fromisoformat(last["started_at"])
-            now_utc   = datetime.now(timezone.utc).replace(tzinfo=None)
+            # Ensure last_dt is timezone-aware — stored timestamps may be naive UTC
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
+            now_utc   = datetime.now(timezone.utc)
             hours_ago = (now_utc - last_dt).total_seconds() / 3600
 
             if hours_ago >= MISSED_BACKUP_HOURS and not self._missed_alerted:

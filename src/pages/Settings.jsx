@@ -52,6 +52,7 @@ export default function Settings() {
   const [error, setError]           = useState(null);
   const [testMsg, setTestMsg]       = useState(null);
   const [pruneMsg, setPruneMsg]     = useState(null);
+  const [verifyMsg, setVerifyMsg]   = useState(null);
   const [saving, setSaving]         = useState({});
   const [ssdStatus, setSsdStatus]   = useState(null);
   const [watcherStatus, setWatcherStatus] = useState(null);
@@ -255,6 +256,35 @@ export default function Settings() {
             Run Prune Now
           </button>
           {pruneMsg && <span style={{ fontSize: 12, color: pruneMsg.startsWith("✓") ? "var(--amber)" : "var(--red)" }}>{pruneMsg}</span>}
+        </div>
+      </div>
+
+      {/* Verify Integrity */}
+      <div className="card">
+        <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>🔍</span> Verify Integrity
+        </div>
+        <div className="text-sm text-secondary mb-12">
+          Re-hashes all backup files and checks them against the manifest. Run monthly to catch silent SSD corruption.
+        </div>
+        <div className="flex gap-12 items-center">
+          <button className="btn btn-secondary btn-sm"
+            onClick={async () => {
+              setVerifyMsg("Verifying…");
+              try {
+                const r = await api.verifyBackups();
+                setVerifyMsg(`✓ ${r.verified ?? 0} OK  ·  ${r.failed ?? 0} corrupt  ·  ${r.missing ?? 0} missing`);
+              } catch (e) {
+                setVerifyMsg(`✕ ${e.message}`);
+              }
+            }}>
+            Verify Integrity Now
+          </button>
+          {verifyMsg && (
+            <span style={{ fontSize: 12, color: verifyMsg.startsWith("✓") ? "var(--green)" : verifyMsg === "Verifying…" ? "var(--text-secondary)" : "var(--red)" }}>
+              {verifyMsg}
+            </span>
+          )}
         </div>
       </div>
 

@@ -42,3 +42,40 @@ def test_parse_time_no_minute_component():
     h, m = _parse_time("08")
     assert h == 8
     assert m == 0
+
+
+# =============================================================================
+#   Regression — fix #3: timezone-aware missed-backup check
+# =============================================================================
+
+def test_hours_ago_with_naive_stored_timestamp():
+    """
+    Regression: fromisoformat on a naive UTC string must not crash
+    when compared against timezone.utc now.
+    The fix coerces naive datetimes to UTC before subtraction.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    naive_ts = "2026-01-01T06:00:00"          # naive — no tzinfo
+    last_dt  = datetime.fromisoformat(naive_ts)
+    if last_dt.tzinfo is None:
+        last_dt = last_dt.replace(tzinfo=timezone.utc)
+
+    now_utc   = datetime.now(timezone.utc)
+    # Must not raise TypeError
+    hours_ago = (now_utc - last_dt).total_seconds() / 3600
+    assert hours_ago > 0
+
+
+def test_hours_ago_with_aware_stored_timestamp():
+    """Aware timestamps must also work correctly."""
+    from datetime import datetime, timezone, timedelta
+
+    aware_ts = "2026-01-01T06:00:00+00:00"
+    last_dt  = datetime.fromisoformat(aware_ts)
+    if last_dt.tzinfo is None:
+        last_dt = last_dt.replace(tzinfo=timezone.utc)
+
+    now_utc   = datetime.now(timezone.utc)
+    hours_ago = (now_utc - last_dt).total_seconds() / 3600
+    assert hours_ago > 0

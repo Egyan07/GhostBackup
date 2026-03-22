@@ -121,3 +121,73 @@ def test_get_ssd_status_valid_path(tmp_path):
     assert "available_gb" in result
     assert "total_gb" in result
     assert result["total_gb"] > 0
+
+
+# =============================================================================
+#   Regression — fix #4: prune marks runs correctly
+# =============================================================================
+
+def test_prune_calls_mark_run_pruned_when_files_deleted(tmp_path):
+    """
+    Regression: prune_old_backups must call manifest.mark_run_pruned
+    for dates where files were actually deleted.
+    """
+    from unittest.mock import MagicMock, patch
+    from datetime import datetime, timezone, timedelta
+    from pathlib import Path
+    from syncer import LocalSyncer
+
+    # Create a real file to be pruned
+    backup_file = tmp_path / "old_backup.xlsx"
+    backup_file.write_bytes(b"data")
+
+    old_date = (datetime.now(timezone.utc) - timedelta(days=400))
+    old_ts   = old_date.isoformat()
+
+    cfg = MagicMock()
+    cfg.get_enabled_sources.return_value = [{"label": "Accounts"}]
+    cfg.secondary_ssd_path = ""
+    cfg.encryption_key     = None
+    cfg.encryption_enabled = False
+
+    manifest = MagicMock()
+    manifest.get_backup_files_for_prune.return_value = [{
+        "backup_path": str(backup_file),
+        "started_at":  old_ts,
+    }]
+
+    syncer = LocalSyncer(config=cfg, manifest=manifest)
+    removed = syncer.prune_old_backups(daily_days=365, weekly_days=2555, guard_days=7)
+
+    assert removed == 1
+    assert not backup_file.exists()
+    # mark_run_pruned must have been called at least once
+    manifest.mark_run_pruned.assert_called_once()
+
+
+def test_prune_does_not_mark_pruned_when_nothing_deleted(tmp_path):
+    """
+    Regression: mark_run_pruned must NOT be called if no files were deleted.
+    """
+    from unittest.mock import MagicMock
+    from datetime import datetime, timezone, timedelta
+    from syncer import LocalSyncer
+
+    cfg = MagicMock()
+    cfg.get_enabled_sources.return_value = [{"label": "Accounts"}]
+    cfg.secondary_ssd_path = ""
+    cfg.encryption_key     = None
+    cfg.encryption_enabled = False
+
+    manifest = MagicMock()
+    # Return a file that doesn't exist on disk — nothing deleted
+    manifest.get_backup_files_for_prune.return_value = [{
+        "backup_path": str(tmp_path / "nonexistent.xlsx"),
+        "started_at":  (datetime.now(timezone.utc) - timedelta(days=400)).isoformat(),
+    }]
+
+    syncer = LocalSyncer(config=cfg, manifest=manifest)
+    removed = syncer.prune_old_backups(daily_days=365, weekly_days=2555, guard_days=7)
+
+    assert removed == 0
+    manifest.mark_run_pruned.assert_not_called()

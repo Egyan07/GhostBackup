@@ -607,6 +607,7 @@ class LocalSyncer:
             old_files = self._manifest.get_backup_files_for_prune(
                 label, daily_cutoff.isoformat()
             )
+            pruned_dates: set[str] = set()
             for f in old_files:
                 backed_up = datetime.fromisoformat(
                     f.get("started_at", datetime.now(timezone.utc).isoformat())
@@ -618,8 +619,17 @@ class LocalSyncer:
                     try:
                         bp.unlink()
                         removed += 1
+                        # Track the date so we can mark the run as pruned
+                        pruned_dates.add(backed_up.strftime("%Y-%m-%d"))
                     except OSError as e:
                         logger.warning(f"Could not prune {bp}: {e}")
+
+            # Mark runs pruned only when files were actually deleted
+            for date_str in pruned_dates:
+                next_day = (
+                    datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)
+                ).strftime("%Y-%m-%d")
+                self._manifest.mark_run_pruned(date_str, next_day)
 
         logger.info(f"Prune complete — {removed} files removed")
         return removed

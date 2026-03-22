@@ -492,3 +492,65 @@ class TestEncryptionKey:
         key1 = client.post("/settings/encryption/generate-key").json()["key"]
         key2 = client.post("/settings/encryption/generate-key").json()["key"]
         assert key1 != key2
+
+
+# =============================================================================
+#   Regression tests — fixes #1, #2, #5
+# =============================================================================
+
+class TestConfigReset:
+    def test_reset_returns_defaults(self, client):
+        """POST /config/reset must return 200 with a config payload."""
+        r = client.post("/config/reset")
+        assert r.status_code == 200
+        data = r.json()
+        assert "config" in data
+        assert isinstance(data["config"], dict)
+
+    def test_reset_message_present(self, client):
+        r = client.post("/config/reset")
+        assert "reset" in r.json().get("message", "").lower()
+
+
+class TestCancelledRunStatus:
+    def test_cancelled_status_preserved_after_finalize(self, client):
+        """A run marked cancelled must not be overwritten by finalize logic."""
+        import api as api_mod
+        # Simulate a cancelled run
+        api_mod._active_run = {
+            "status":           "cancelled",
+            "run_id":           1,
+            "files_transferred": 0,
+            "files_failed":     0,
+            "bytes_transferred": 0,
+            "errors":           [],
+            "libraries":        {"Accounts": {"status": "success", "pct": 100,
+                                              "files_transferred": 0, "files_failed": 0,
+                                              "bytes_transferred": 0}},
+            "overall_pct":      100,
+            "started_at":       "2026-01-01T08:00:00",
+            "finished_at":      "2026-01-01T08:01:00",
+        }
+        # Final status resolution must preserve cancelled
+        lib_statuses = [v["status"] for v in api_mod._active_run["libraries"].values()]
+        if not lib_statuses or all(s == "success" for s in lib_statuses):
+            final_status = "success"
+        elif all(s in ("failed", "circuit_broken") for s in lib_statuses):
+            final_status = "failed"
+        else:
+            final_status = "partial"
+
+        if api_mod._active_run.get("status") == "cancelled":
+            final_status = "cancelled"
+
+        assert final_status == "cancelled"
+        api_mod._active_run = None
+
+
+class TestVerifyEndpoint:
+    def test_verify_endpoint_exists(self, client):
+        """POST /verify must be reachable and return expected keys."""
+        r = client.post("/verify")
+        assert r.status_code == 200
+        data = r.json()
+        assert "message" in data

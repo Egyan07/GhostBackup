@@ -137,6 +137,7 @@ export const api = {
 
   // Config
   getConfig:       ()            => request("GET",    "/config"),
+  verifyBackups:   ()            => request("POST",   "/verify"),
   resetConfig:     ()            => request("POST",   "/config/reset"),
   updateConfig:    (body)        => request("PATCH",  "/config", body),
   addSite:         (body)        => request("POST",   "/config/sites", body),

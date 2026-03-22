@@ -419,6 +419,10 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
             final_status = "partial"
 
         with _run_mutex:
+            # If the run was cancelled by the user, preserve that status —
+            # do not overwrite it with success/partial from the post-cancel work.
+            if _active_run.get("status") == "cancelled":
+                final_status = "cancelled"
             _active_run["status"]      = final_status
             _active_run["overall_pct"] = 100
             _active_run["finished_at"] = datetime.now(timezone.utc).isoformat()

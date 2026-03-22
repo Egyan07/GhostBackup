@@ -43,7 +43,7 @@ The installer will:
    - The **source folder** to back up (your SharePoint-synced folder)
    - The **primary SSD drive path** (e.g. `D:\GhostBackup`)
    - An optional **secondary SSD path** for 3-2-1 redundancy
-6. Generate a Fernet encryption key and save it to `.env.local`
+6. Generate an AES-256-GCM encryption key and save it to `.env.local`
 7. Patch `backend/config/config.yaml` with your paths
 8. Create `start.bat` as a one-click launcher
 
@@ -79,6 +79,8 @@ Double-click **`start.bat`**, or run:
 ```
 start.bat
 ```
+
+> **Note:** `start.bat` runs `npm run dev` which starts the Vite development server alongside Electron. This is the normal way to run GhostBackup from a source install.
 
 ---
 
