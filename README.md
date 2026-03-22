@@ -7,6 +7,7 @@
 ![GitHub issues](https://img.shields.io/github/issues/Egyan07/GhostBackup)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Egyan07/GhostBackup)
 ![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
+[![Project Quality](https://img.shields.io/badge/Quality-9.5%2F10-brightgreen)](https://github.com/Egyan07/GhostBackup)
 
 **Coded by Egyan**
 
