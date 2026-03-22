@@ -191,3 +191,30 @@ def test_prune_does_not_mark_pruned_when_nothing_deleted(tmp_path):
 
     assert removed == 0
     manifest.mark_run_pruned.assert_not_called()
+
+
+# =============================================================================
+#   Regression — fix #8: encryption warning is reachable
+# =============================================================================
+
+def test_encryption_warning_fires_when_key_missing(caplog):
+    """
+    Regression: warning must fire when encryption is enabled in config
+    but GHOSTBACKUP_ENCRYPTION_KEY is not set.
+    Previously the condition was unreachable.
+    """
+    import logging
+    from unittest.mock import MagicMock
+    from syncer import LocalSyncer
+
+    cfg = MagicMock()
+    cfg.encryption_key     = None          # key not set
+    cfg._data              = {"encryption": {"enabled": True}}
+    cfg.secondary_ssd_path = ""
+
+    manifest = MagicMock()
+
+    with caplog.at_level(logging.WARNING, logger="syncer"):
+        LocalSyncer(config=cfg, manifest=manifest)
+
+    assert any("UNENCRYPTED" in r.message for r in caplog.records)

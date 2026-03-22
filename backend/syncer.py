@@ -261,7 +261,8 @@ class LocalSyncer:
         self._config   = config
         self._manifest = manifest
         self._crypto   = _CryptoHelper(config.encryption_key)
-        if not self._crypto.enabled and config.encryption_enabled:
+        cfg_encryption_on = config._data.get("encryption", {}).get("enabled", True)
+        if cfg_encryption_on and not self._crypto.enabled:
             logger.warning(
                 "Encryption is enabled in config but GHOSTBACKUP_ENCRYPTION_KEY is not set. "
                 "Backups will be stored UNENCRYPTED. Run SETUP.md step 3 to configure the key."

@@ -16,13 +16,31 @@ import yaml
 def main() -> int:
     root = Path(__file__).parent.parent
 
-    # ── Generate encryption key ────────────────────────────────────────────
-    try:
-        from cryptography.fernet import Fernet
-        key = Fernet.generate_key().decode()
-    except ImportError:
-        print("[ERROR] cryptography package missing — run pip install -r backend/requirements.txt")
-        return 1
+    # ── Generate encryption key (skip if already configured) ──────────────
+    env_path   = root / ".env.local"
+    key        = None
+    key_is_new = False
+
+    if env_path.exists():
+        # Re-running setup — preserve the existing key to avoid locking out old backups
+        existing = env_path.read_text(encoding="utf-8")
+        for line in existing.splitlines():
+            if line.startswith("GHOSTBACKUP_ENCRYPTION_KEY="):
+                key = line.split("=", 1)[1].strip()
+                break
+
+    if not key:
+        try:
+            from cryptography.fernet import Fernet
+            key = Fernet.generate_key().decode()
+            key_is_new = True
+        except ImportError:
+            print("[ERROR] cryptography package missing — run pip install -r backend/requirements.txt")
+            return 1
+    else:
+        print("  [OK] Existing encryption key found in .env.local — preserving it.")
+        print("       Delete .env.local manually if you intentionally want a new key.")
+        print()
 
     # ── Ask for backup paths ───────────────────────────────────────────────
     print("  Where are the files you want to back up?")
@@ -40,13 +58,13 @@ def main() -> int:
     secondary_path = input("  Secondary SSD drive path: ").strip()
     print()
 
-    # ── Write .env.local ───────────────────────────────────────────────────
-    env_path = root / ".env.local"
-    env_path.write_text(
-        f"GHOSTBACKUP_ENCRYPTION_KEY={key}\n"
-        f"GHOSTBACKUP_SMTP_PASSWORD=\n",
-        encoding="utf-8",
-    )
+    # ── Write .env.local (only when a new key was generated) ──────────────
+    if key_is_new:
+        env_path.write_text(
+            f"GHOSTBACKUP_ENCRYPTION_KEY={key}\n"
+            f"GHOSTBACKUP_SMTP_PASSWORD=\n",
+            encoding="utf-8",
+        )
 
     # ── Copy and patch config.yaml ─────────────────────────────────────────
     example = root / "backend" / "config" / "config.yaml.example"
@@ -74,21 +92,22 @@ def main() -> int:
     with open(config, "w", encoding="utf-8") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
 
-    # ── Print key prominently ──────────────────────────────────────────────
+    # ── Print key prominently (only when newly generated) ─────────────────
     border = "=" * 60
-    print()
-    print(f"  {border}")
-    print(f"  IMPORTANT — SAVE YOUR ENCRYPTION KEY")
-    print(f"  {border}")
-    print()
-    print(f"  {key}")
-    print()
-    print(f"  {border}")
-    print()
-    print("  This key is also saved in .env.local in this folder.")
-    print("  Store a copy on a SEPARATE device (phone, USB, cloud note).")
-    print("  If you lose the key your backups CANNOT be decrypted.")
-    print()
+    if key_is_new:
+        print()
+        print(f"  {border}")
+        print(f"  IMPORTANT — SAVE YOUR ENCRYPTION KEY")
+        print(f"  {border}")
+        print()
+        print(f"  {key}")
+        print()
+        print(f"  {border}")
+        print()
+        print("  This key is also saved in .env.local in this folder.")
+        print("  Store a copy on a SEPARATE device (phone, USB, cloud note).")
+        print("  If you lose the key your backups CANNOT be decrypted.")
+        print()
     print("  Summary")
     print(f"  -------")
     print(f"  Source path  : {source_path or '(not set — add later via Settings)'}")

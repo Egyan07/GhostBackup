@@ -38,8 +38,9 @@ export default function LogsViewer() {
   const lvlColor = { INFO: "var(--text-secondary)", WARN: "var(--amber)", ERROR: "var(--red)" };
 
   const exportCsv = () => {
+    const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const rows = [["Time", "Level", "Message"], ...filtered.map(l => [l.logged_at, l.level, l.message])];
-    const blob = new Blob([rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n")], { type: "text/csv" });
+    const blob = new Blob([rows.map(r => r.map(escape).join(",")).join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `run_${sel?.id}_logs.csv`;
