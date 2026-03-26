@@ -8,6 +8,7 @@ variable at startup.
 """
 
 import asyncio
+import hmac
 import http.client
 import json
 import logging
@@ -22,7 +23,7 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -54,7 +55,7 @@ _run_mutex:       threading.Lock            = threading.Lock()  # protects _acti
 
 async def _desktop_notify(title: str, body: str) -> None:
     """Forward a notification to the Electron notification server on port 8766."""
-    try:
+    def _blocking_notify():
         conn = http.client.HTTPConnection("127.0.0.1", 8766, timeout=2)
         conn.request(
             "POST", "/notify",
@@ -66,6 +67,9 @@ async def _desktop_notify(title: str, body: str) -> None:
         )
         conn.getresponse()
         conn.close()
+
+    try:
+        await asyncio.to_thread(_blocking_notify)
     except Exception:
         pass
 
@@ -116,7 +120,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="2.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -145,7 +149,7 @@ async def auth_middleware(request: Request, call_next):
     expected_token = os.getenv("GHOSTBACKUP_API_TOKEN", "")
     if expected_token:
         provided = request.headers.get("X-API-Key", "")
-        if provided != expected_token:
+        if not hmac.compare_digest(provided, expected_token):
             return Response(
                 content='{"detail":"Unauthorized — invalid or missing X-API-Key"}',
                 status_code=401,
@@ -390,6 +394,9 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                                 ((idx + lib_state["pct"] / 100) / total_sources) * 100
                             )
 
+                    # Flush batched manifest commits after each library
+                    _manifest.flush()
+
                     if lib_state["status"] not in ("circuit_broken", "failed", "cancelled"):
                         lib_state["status"] = (
                             "partial" if lib_state["files_failed"] > 0 else "success"
@@ -529,7 +536,7 @@ async def _backup_manifest_to_ssd() -> None:
 async def health():
     return {
         "status":            "ok",
-        "version":           "2.0.0",
+        "version":           "2.3.0",
         "scheduler_running": _scheduler.is_running() if _scheduler else False,
         "next_run":          _scheduler.next_run_time() if _scheduler else None,
         "schedule": {
@@ -567,18 +574,20 @@ async def dashboard():
 
 @app.post("/run/start")
 async def start_run(req: RunRequest, background_tasks: BackgroundTasks):
-    if _active_run and _active_run.get("status") == "running":
-        raise HTTPException(409, "A backup run is already in progress")
+    with _run_mutex:
+        if _active_run and _active_run.get("status") == "running":
+            raise HTTPException(409, "A backup run is already in progress")
     background_tasks.add_task(run_backup_job, req.full, req.sources)
     return {"message": "Backup job started", "full": req.full}
 
 
 @app.post("/run/stop")
 async def stop_run():
-    if not _active_run or _active_run.get("status") != "running":
-        raise HTTPException(400, "No active run to stop")
-    _active_run["status"]      = "cancelled"
-    _active_run["finished_at"] = datetime.now(timezone.utc).isoformat()
+    with _run_mutex:
+        if not _active_run or _active_run.get("status") != "running":
+            raise HTTPException(400, "No active run to stop")
+        _active_run["status"]      = "cancelled"
+        _active_run["finished_at"] = datetime.now(timezone.utc).isoformat()
     return {"message": "Run cancellation requested"}
 
 
@@ -590,7 +599,7 @@ async def run_status():
 
 
 @app.get("/runs")
-async def get_runs(limit: int = 30, offset: int = 0):
+async def get_runs(limit: int = Query(default=30, ge=1, le=1000), offset: int = Query(default=0, ge=0)):
     return _manifest.get_runs(limit=limit, offset=offset)
 
 
@@ -676,7 +685,7 @@ async def remove_site(site_name: str):
 
 
 @app.get("/config/audit")
-async def get_config_audit(limit: int = 100):
+async def get_config_audit(limit: int = Query(default=100, ge=1, le=1000)):
     return _manifest.get_config_audit(limit=limit)
 
 
@@ -692,6 +701,11 @@ async def restore(req: RestoreRequest, background_tasks: BackgroundTasks):
                                 subfolder=req.subfolder)
     if not files:
         raise HTTPException(404, "No files found matching the restore criteria")
+
+    # Validate destination path to prevent path traversal
+    dest_resolved = Path(req.destination).resolve()
+    if ".." in dest_resolved.parts:
+        raise HTTPException(400, "Path traversal detected in destination")
 
     if req.dry_run:
         return {

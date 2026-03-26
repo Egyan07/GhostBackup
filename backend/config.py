@@ -154,10 +154,14 @@ class ConfigManager:
     # ── Encryption ────────────────────────────────────────────────────────────
 
     @property
+    def encryption_config_enabled(self) -> bool:
+        """True when encryption is enabled in config (regardless of whether key is set)."""
+        return self._data.get("encryption", {}).get("enabled", True)
+
+    @property
     def encryption_enabled(self) -> bool:
         """True only when encryption is enabled in config AND the key is set."""
-        cfg_enabled = self._data.get("encryption", {}).get("enabled", True)
-        return bool(cfg_enabled and self.encryption_key)
+        return bool(self.encryption_config_enabled and self.encryption_key)
 
     # ── Sources ───────────────────────────────────────────────────────────────
 
@@ -360,7 +364,8 @@ class ConfigManager:
         logger.info(f"Config updated: {list(updates.keys())}")
 
     def update_smtp(self, smtp: dict) -> None:
-        smtp_safe = {k: v for k, v in smtp.items() if k != "password"}
+        SMTP_KEYS = {"host", "port", "sender", "recipients", "use_tls", "username", "user"}
+        smtp_safe = {k: v for k, v in smtp.items() if k in SMTP_KEYS}
         _deep_merge(self._data["smtp"], smtp_safe)
         self._save()
 

@@ -49,6 +49,11 @@ export default function App() {
   const [screen, setScreen] = useState("dashboard");
   const [health, setHealth] = useState(null);
   const [clock,  setClock]  = useState("");
+  const [appVersion, setAppVersion] = useState("v2.0.0");
+
+  useEffect(() => {
+    window.ghostbackup?.version?.().then(v => { if (v) setAppVersion("v" + v); });
+  }, []);
 
   useEffect(() => {
     const tick = () => {
@@ -100,7 +105,9 @@ export default function App() {
             <div key={sec}>
               <div className="sidebar-section-label">{sec}</div>
               {NAV.filter(n => n.sec === sec).map(n => (
-                <div key={n.id} className={`nav-item ${screen === n.id ? "active" : ""}`} onClick={() => setScreen(n.id)}>
+                <div key={n.id} className={`nav-item ${screen === n.id ? "active" : ""}`} onClick={() => setScreen(n.id)}
+                     role="button" tabIndex={0}
+                     onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setScreen(n.id); }}>
                   <span className="nav-icon">{n.icon}</span>
                   {n.label}
                 </div>
@@ -110,7 +117,7 @@ export default function App() {
         </div>
 
         <div className="sidebar-footer">
-          <span className="version-chip">v2.0.0</span>
+          <span className="version-chip">{appVersion}</span>
           <span style={{ flex: 1 }}>Egyan · IT</span>
         </div>
       </div>

@@ -216,7 +216,6 @@ class ManifestDB:
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
-            self._conn.commit()
 
     # ── File hash cache (incremental detection) ───────────────────────────────
 
@@ -334,7 +333,6 @@ class ManifestDB:
                 "INSERT INTO logs (run_id, logged_at, level, message) VALUES (?,?,?,?)",
                 (run_id, datetime.now(timezone.utc).isoformat(), level.upper(), message),
             )
-            self._conn.commit()
 
     def get_logs(self, run_id: int, level: Optional[str] = None,
                  limit: int = 500) -> list[dict]:
@@ -418,7 +416,14 @@ class ManifestDB:
         run["duration_human"] = _fmt_duration(run.get("duration_seconds", 0))
         return run
 
+    def flush(self) -> None:
+        """Commit any batched writes (record_file, log) to disk."""
+        with self._lock:
+            self._conn.commit()
+
     def close(self) -> None:
+        with self._lock:
+            self._conn.commit()
         self._conn.close()
         logger.info("ManifestDB closed")
 

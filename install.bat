@@ -86,11 +86,15 @@ if errorlevel 1 (
 )
 
 REM ── Create start.bat ──────────────────────────────────────────────────────
-(
-    echo @echo off
-    echo call .venv\Scripts\activate.bat
-    echo npm run dev
-) > start.bat
+if exist start.bat (
+    echo  [SKIP] start.bat already exists — not overwriting.
+) else (
+    (
+        echo @echo off
+        echo call .venv\Scripts\activate.bat
+        echo npm run dev
+    ) > start.bat
+)
 
 echo.
 echo  ============================================

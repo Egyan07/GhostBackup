@@ -28,6 +28,7 @@ WIN_PATH_PREFIX = "\\\\?\\"
 
 # ── Streaming encryption constants ────────────────────────────────────────────
 _STREAM_MAGIC = b"GBENC1"   # header identifying the streaming AES-GCM format
+_ENCRYPTION_VERSION = b'\x01'  # version prefix for key rotation support
 _NONCE_SIZE = 12             # AES-GCM standard nonce length
 _LEN_SIZE = 4                # uint32 big-endian chunk ciphertext length
 
@@ -100,6 +101,7 @@ class _CryptoHelper:
         """Encrypt *src_path* to *dst_path* using AES-256-GCM in fixed-size chunks."""
         with open(src_path, "rb") as fin, open(dst_path, "wb") as fout:
             fout.write(_STREAM_MAGIC)
+            fout.write(_ENCRYPTION_VERSION)
             while True:
                 plaintext = fin.read(chunk_bytes)
                 if not plaintext:
@@ -128,6 +130,9 @@ class _CryptoHelper:
             magic = fin.read(len(_STREAM_MAGIC))
             if magic != _STREAM_MAGIC:
                 raise ValueError("Invalid GhostBackup encrypted file header")
+            version = fin.read(len(_ENCRYPTION_VERSION))
+            if version != _ENCRYPTION_VERSION:
+                raise ValueError(f"Unsupported encryption version: {version!r}")
             while True:
                 hdr = fin.read(_LEN_SIZE)
                 if len(hdr) < _LEN_SIZE:
@@ -151,6 +156,7 @@ class _CryptoHelper:
         if self._is_stream_format(path):
             with open(path, "rb") as fin:
                 fin.read(len(_STREAM_MAGIC))  # skip header
+                fin.read(len(_ENCRYPTION_VERSION))  # skip version byte
                 while True:
                     hdr = fin.read(_LEN_SIZE)
                     if len(hdr) < _LEN_SIZE:
@@ -191,9 +197,12 @@ def get_ssd_status(ssd_path: str) -> dict:
         fs_type = "unknown"
         try:
             for part in psutil.disk_partitions(all=True):
-                if ssd_path.lower().startswith(part.mountpoint.lower()):
-                    fs_type = part.fstype
-                    break
+                try:
+                    if Path(ssd_path).resolve().is_relative_to(Path(part.mountpoint).resolve()):
+                        fs_type = part.fstype
+                        break
+                except (ValueError, TypeError):
+                    continue
         except Exception:
             pass
         return {
@@ -261,8 +270,7 @@ class LocalSyncer:
         self._config   = config
         self._manifest = manifest
         self._crypto   = _CryptoHelper(config.encryption_key)
-        cfg_encryption_on = config._data.get("encryption", {}).get("enabled", True)
-        if cfg_encryption_on and not self._crypto.enabled:
+        if config.encryption_config_enabled and not self._crypto.enabled:
             logger.warning(
                 "Encryption is enabled in config but GHOSTBACKUP_ENCRYPTION_KEY is not set. "
                 "Backups will be stored UNENCRYPTED. Run SETUP.md step 3 to configure the key."
@@ -464,7 +472,7 @@ class LocalSyncer:
         on_progress: Optional[Callable[[str, int], None]] = None,
     ) -> dict:
         """Restore backed-up files to destination, decrypting if necessary."""
-        dest_root = Path(destination)
+        dest_root = Path(destination).resolve()
         dest_root.mkdir(parents=True, exist_ok=True)
 
         restored = 0
@@ -493,7 +501,11 @@ class LocalSyncer:
             if not rel_path:
                 rel_path = Path(f.get("name", src.name))
 
-            dest = dest_root / rel_path
+            dest = (dest_root / rel_path).resolve()
+            if not str(dest).startswith(str(dest_root)):
+                errors.append({"file": str(rel_path), "error": "Path traversal detected"})
+                failed += 1
+                continue
 
             if not src.exists():
                 errors.append({"file": str(rel_path), "error": "Backup file not found on SSD"})

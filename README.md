@@ -220,8 +220,12 @@ GhostBackup/
 │       ├── test_reporter.py
 │       ├── test_scheduler_utils.py
 │       ├── test_setup_helper.py
+│       ├── test_syncer_copy.py
+│       ├── test_syncer_restore.py
 │       ├── test_syncer_scan.py
 │       ├── test_syncer_utils.py
+│       ├── test_syncer_verify.py
+│       ├── test_watcher.py
 │       └── test_utils.py
 │
 ├── electron/
@@ -262,14 +266,17 @@ GhostBackup/
 
 # 🔐 Security
 
-| Layer              | Implementation                               |
-| ------------------ | -------------------------------------------- |
-| Encryption         | AES-256-GCM streaming (legacy Fernet compat) |
-| API Authentication | Session-based API tokens                     |
-| Database Safety    | SQLite with `PRAGMA synchronous=FULL`        |
-| Process Safety     | Process name verification before termination |
-| Data Integrity     | xxhash verification                          |
-| Failure Control    | Circuit breaker threshold                    |
+| Layer              | Implementation                                        |
+| ------------------ | ----------------------------------------------------- |
+| Encryption         | AES-256-GCM streaming with version header (key rotation ready) |
+| API Authentication | Timing-safe session API tokens (`hmac.compare_digest`) |
+| Path Safety        | Path traversal validation on restore endpoint          |
+| Electron Sandbox   | Chromium sandbox enabled, CSP in dev + production      |
+| Credential Safety  | Input sanitization on credential writes                |
+| Database Safety    | SQLite with `PRAGMA synchronous=FULL`, batched commits |
+| Process Safety     | Process name verification before termination           |
+| Data Integrity     | xxhash verification                                    |
+| Failure Control    | Circuit breaker threshold                              |
 
 ---
 
@@ -313,6 +320,59 @@ MIT License
 ---
 
 # 📋 Changelog
+
+## v2.3.0 — Security Hardening, Performance & Test Coverage
+
+### Critical Security Fixes
+- **Timing-safe API token comparison** (`api.py`): replaced plain `!=` string comparison with `hmac.compare_digest()` to prevent timing-based side-channel attacks.
+- **Path traversal validation** (`api.py`, `syncer.py`): restore endpoint now validates destination path and blocks `..` path segments. Both API layer and syncer enforce this as defence-in-depth.
+- **Encryption key versioning** (`syncer.py`): encrypted files now include a version byte (`_ENCRYPTION_VERSION = 0x01`) in the header, enabling future key rotation without breaking old backups. Critical for 7-year compliance retention.
+- **Electron `shell:open-path` validation** (`main.js`): IPC handler now validates the path exists and is a directory before opening, preventing arbitrary file/executable execution from a compromised renderer.
+- **Credential injection prevention** (`main.js`): values written to `.env.local` are sanitized — newline, carriage return, double quote, and backslash characters are rejected.
+- **Notification server body limit** (`main.js`): HTTP notification server on port 8766 now caps request body at 10KB to prevent memory exhaustion from local processes.
+- **Dependencies updated**: `cryptography` 42.0.5 → 44.0.0, `fastapi` 0.111.0 → 0.115.0, `electron` 31.0.0 → 33.3.1. All carry known CVE patches.
+- **CI security auditing** (`ci.yml`): added `pip-audit` and `npm audit` job to catch vulnerable dependencies automatically.
+
+### Important Fixes
+- **Race condition eliminated** (`api.py`): `/run/start` and `/run/stop` now acquire `_run_mutex` before checking or mutating `_active_run`, preventing duplicate concurrent runs.
+- **SQLite batch commits** (`manifest.py`): removed per-record `commit()` calls from `record_file()` and `log()`. Added `flush()` method called after each library scan — major performance improvement for large backups (thousands of files).
+- **Chromium sandbox enabled** (`main.js`): `sandbox: true` in BrowserWindow reduces attack surface.
+- **Production CSP headers** (`main.js`): Content-Security-Policy now set for both dev and production builds.
+- **Config encapsulation** (`config.py`, `syncer.py`): added `encryption_config_enabled` property — syncer no longer accesses `config._data` directly.
+- **SMTP key whitelisting** (`config.py`): `update_smtp()` uses an explicit key allowlist instead of only filtering password.
+- **Query parameter bounds** (`api.py`): `limit` capped at 1000, `offset` minimum 0 on `/runs` and `/config/audit` endpoints.
+- **Mount point matching** (`syncer.py`): replaced string `startswith()` with `Path.is_relative_to()` to prevent false matches.
+- **Async desktop notify** (`api.py`): wrapped blocking `http.client` call in `asyncio.to_thread()` so it no longer blocks the event loop.
+- **LiveRun polling fix** (`LiveRun.jsx`): replaced `setInterval` with `useRef`-based `setTimeout` that adjusts delay without recreating the interval on every status change.
+- **ESLint restored in CI** (`ci.yml`): lint job now runs `npm run lint`.
+- **CI syntax check** (`ci.yml`): replaced hardcoded file list with `python -m compileall backend/ -q`.
+
+### Minor Fixes
+- **Timezone consistency** (`watcher.py`): `datetime.now()` → `datetime.now(timezone.utc)`.
+- **UTC string handling** (`LiveRun.jsx`): normalizes Python's `+00:00` suffix to `Z` before parsing.
+- **Memory leak fix** (`LogsViewer.jsx`): `URL.revokeObjectURL()` called after CSV export.
+- **Dynamic version chip** (`GhostBackup.jsx`): fetches version from IPC instead of hardcoded `v2.0.0`.
+- **Duplicate exclusion check** (`BackupConfig.jsx`): prevents adding duplicate patterns.
+- **Platform-aware restore path** (`RestoreUI.jsx`): defaults to Linux path on non-Windows.
+- **Error logging** (`AlertBell.jsx`): empty `catch {}` blocks now log via `console.warn`.
+- **Keyboard accessibility** (`GhostBackup.jsx`): nav items have `role="button"`, `tabIndex`, `onKeyDown`.
+- **Install safety** (`install.bat`): won't overwrite existing `start.bat`.
+- **Coverage threshold** (`ci.yml`): raised from 60% to 70%.
+- **Node 22 LTS** (`ci.yml`): added to frontend test matrix.
+- **SETUP.md clarification**: noted Fernet key format vs AES-256-GCM encryption.
+- **Test dependencies pinned** (`requirements.txt`): `pytest==8.3.4`, `httpx==0.27.2` (were unpinned with `>=`).
+
+### New Tests (21 tests across 4 new files)
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `test_syncer_copy.py` | 6 | `copy_file()`: basic, atomic write, checksum, dirs, encryption, secondary SSD |
+| `test_syncer_restore.py` | 5 | `restore_files()`: basic, decryption round-trip, path traversal blocked, dirs, missing file |
+| `test_syncer_verify.py` | 3 | `verify_backups()`: intact, corrupted, missing |
+| `test_watcher.py` | 5 | `_SourceHandler`: debounce, cooldown, UTC timezone, ghosttmp ignored, exclusions |
+| `test_manifest.py` | +1 | `flush()` batch commit verification |
+
+---
 
 ## v2.1.0 — Security Fixes, Streaming Encryption & Production Hardening
 

@@ -20,7 +20,7 @@ export default function AlertBell() {
       const data = await api.getAlerts();
       setAlerts(data.alerts || []);
       setUnread(data.unread_count || 0);
-    } catch {}
+    } catch (e) { console.warn("AlertBell:", e); }
   }, []);
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function AlertBell() {
       await api.dismissAlert(id);
       setAlerts(a => a.map(x => x.id === id ? { ...x, dismissed: true } : x));
       setUnread(u => Math.max(0, u - 1));
-    } catch {}
+    } catch (e) { console.warn("AlertBell:", e); }
   };
 
   const dismissAll = async () => {
@@ -58,7 +58,7 @@ export default function AlertBell() {
       await api.dismissAllAlerts();
       setAlerts(a => a.map(x => ({ ...x, dismissed: true })));
       setUnread(0);
-    } catch {}
+    } catch (e) { console.warn("AlertBell:", e); }
     setLoading(false);
   };
 

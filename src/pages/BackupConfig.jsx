@@ -143,6 +143,7 @@ export default function BackupConfig() {
 
   const addEx = () => {
     if (!newEx.trim()) return;
+    if ((cfg.backup?.exclude_patterns || []).includes(newEx.trim())) return;
     setCfg(c => ({ ...c, backup: { ...c.backup, exclude_patterns: [...(c.backup?.exclude_patterns || []), newEx.trim()] } }));
     setNewEx("");
   };

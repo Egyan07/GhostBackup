@@ -260,6 +260,41 @@ def test_get_logs_filtered_by_level(db):
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
+# ── Flush ────────────────────────────────────────────────────────────────────
+
+def test_flush_commits_pending(tmp_path):
+    """Call record_file() multiple times, call flush(), verify data is persisted."""
+    db_path = tmp_path / "flush_test.db"
+    db = ManifestDB(db_path=db_path)
+
+    run_id = db.create_run()
+
+    # record_file does NOT auto-commit — data is pending
+    db.record_file(run_id, {
+        "source_label": "Accounts", "name": "a.xlsx",
+        "original_path": "/data/a.xlsx", "size": 100,
+        "mtime": 1_700_000_000.0, "xxhash": "h1",
+    }, "/backup/Accounts/a.xlsx")
+
+    db.record_file(run_id, {
+        "source_label": "Accounts", "name": "b.xlsx",
+        "original_path": "/data/b.xlsx", "size": 200,
+        "mtime": 1_700_000_001.0, "xxhash": "h2",
+    }, "/backup/Accounts/b.xlsx")
+
+    # Flush to commit pending writes
+    db.flush()
+    db.close()
+
+    # Reopen from disk and verify all records were persisted
+    db2 = ManifestDB(db_path=db_path)
+    files = db2.get_files(run_id)
+    assert len(files) == 2
+    names = {f["name"] for f in files}
+    assert names == {"a.xlsx", "b.xlsx"}
+    db2.close()
+
+
 @pytest.mark.parametrize("b, expected_unit", [
     (0,             "B"),
     (512,           "B"),

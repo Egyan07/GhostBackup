@@ -206,7 +206,12 @@ function startNotifyServer() {
     }
 
     let body = "";
-    req.on("data", (chunk) => { body += chunk; });
+    let bodySize = 0;
+    req.on("data", (chunk) => {
+      bodySize += chunk.length;
+      if (bodySize > 10240) { req.destroy(); return; }
+      body += chunk;
+    });
     req.on("end", () => {
       try {
         const { title, body: msg } = JSON.parse(body);
@@ -352,7 +357,7 @@ function createWindow() {
       preload:          path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration:  false,
-      sandbox:          false,
+      sandbox:          true,
       webSecurity:      true,
     },
     show: false,
@@ -378,6 +383,16 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:3000");
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          "Content-Security-Policy": [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data:;"
+          ]
+        }
+      });
+    });
     mainWindow.loadFile(path.join(ROOT_DIR, "dist", "index.html"));
   }
 
@@ -493,16 +508,18 @@ function registerIpcHandlers() {
     if (!ALLOWED_KEYS.includes(key)) {
       return { success: false, error: "Unknown credential key" };
     }
+    const safeValue = value.replace(/[\r\n"\\]/g, "");
+    if (safeValue !== value) return { error: "Invalid characters in credential value" };
     try {
-      process.env[key] = value;
+      process.env[key] = safeValue;
       let envContent = fs.existsSync(ENV_FILE)
         ? fs.readFileSync(ENV_FILE, "utf8")
         : "";
       const regex = new RegExp(`^${key}=.*$`, "m");
       if (regex.test(envContent)) {
-        envContent = envContent.replace(regex, `${key}="${value}"`);
+        envContent = envContent.replace(regex, `${key}="${safeValue}"`);
       } else {
-        envContent += `\n${key}="${value}"`;
+        envContent += `\n${key}="${safeValue}"`;
       }
       fs.writeFileSync(ENV_FILE, envContent.trim() + "\n", { mode: 0o600 });
       return { success: true };
@@ -518,7 +535,12 @@ function registerIpcHandlers() {
 
   ipcMain.handle("shell:open-path", async (_, filePath) => {
     if (!filePath) return;
-    await shell.openPath(filePath);
+    const resolved = path.resolve(filePath);
+    try {
+      const stat = fs.statSync(resolved);
+      if (!stat.isDirectory()) return { error: "Not a directory" };
+    } catch { return { error: "Path not found" }; }
+    await shell.openPath(resolved);
   });
 
   ipcMain.handle("app:api-url",   async () => API_URL);

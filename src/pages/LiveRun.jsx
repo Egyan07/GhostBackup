@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import api from "../api-client.js";
 import StatusPill from "../components/StatusPill.jsx";
 import ErrBanner from "../components/ErrBanner.jsx";
@@ -14,12 +14,22 @@ export default function LiveRun() {
     catch (e) { setError(e.message); }
   }, []);
 
+  const intervalRef = useRef(null);
+  const delayRef = useRef(5000);
+
+  useEffect(() => {
+    delayRef.current = status?.status === "running" ? 1000 : 5000;
+  }, [status?.status]);
+
   useEffect(() => {
     poll();
-    // Poll every 1s during active runs, every 5s when idle
-    const id = setInterval(poll, status?.status === "running" ? 1000 : 5000);
-    return () => clearInterval(id);
-  }, [poll, status?.status]);
+    const tick = () => {
+      poll();
+      intervalRef.current = setTimeout(tick, delayRef.current);
+    };
+    intervalRef.current = setTimeout(tick, delayRef.current);
+    return () => clearTimeout(intervalRef.current);
+  }, [poll]);
 
   const startRun = async (full = false) => {
     setStarting(true); setError(null);
@@ -42,7 +52,8 @@ export default function LiveRun() {
 
   const elapsed = (() => {
     if (!status?.started_at || !isRunning) return null;
-    const utcStr = status.started_at.endsWith("Z") ? status.started_at : status.started_at + "Z";
+    const raw = status.started_at.replace(/\+00:00$/, "Z");
+    const utcStr = raw.endsWith("Z") ? raw : raw + "Z";
     const s = Math.floor((Date.now() - new Date(utcStr)) / 1000);
     if (s < 0) return null;
     return `${Math.floor(s / 60)}m ${s % 60}s elapsed`;

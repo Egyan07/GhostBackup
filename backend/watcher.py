@@ -11,7 +11,7 @@ import fnmatch
 import logging
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Coroutine, Optional
 
@@ -84,7 +84,7 @@ class _SourceHandler(FileSystemEventHandler):
             return
 
         self._last_triggered_mono = now
-        self._last_triggered_at   = datetime.now()
+        self._last_triggered_at   = datetime.now(timezone.utc)
         logger.info(f"[{self.label}] Watcher detected {count} change(s) — triggering backup")
         self._on_trigger(self.label)
 

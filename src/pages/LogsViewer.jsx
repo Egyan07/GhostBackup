@@ -45,6 +45,7 @@ export default function LogsViewer() {
     a.href = URL.createObjectURL(blob);
     a.download = `run_${sel?.id}_logs.csv`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
   return (

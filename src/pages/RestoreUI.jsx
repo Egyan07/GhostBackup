@@ -9,7 +9,7 @@ export default function RestoreUI() {
   const [sel, setSel]           = useState(null);
   const [selLib, setSelLib]     = useState(null);
   const [dry, setDry]           = useState(true);
-  const [dest, setDest]         = useState("C:\\GhostBackup\\Restore");
+  const [dest, setDest]         = useState(navigator.platform?.startsWith("Win") ? "C:\\GhostBackup\\Restore" : "/tmp/GhostBackup/Restore");
   const [restoring, setRestoring] = useState(false);
   const [result, setResult]     = useState(null);
   const [error, setError]       = useState(null);

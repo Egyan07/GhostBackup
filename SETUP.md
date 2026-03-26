@@ -109,6 +109,8 @@ pip install -r backend\requirements.txt
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
+> **Note:** This generates a key in the Fernet-compatible format (URL-safe base64) used by GhostBackup's encryption system. The actual backup encryption uses AES-256-GCM, but the key format remains Fernet-compatible for consistency.
+
 **Store this key on a separate device. Loss of key = loss of access to all backups.**
 
 ### Step 4 — Create `.env.local`
@@ -208,6 +210,7 @@ npm test
    ```
    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
    ```
+   > **Note:** This generates a key in the Fernet-compatible format (URL-safe base64) used by GhostBackup's encryption system. The actual backup encryption uses AES-256-GCM, but the key format remains Fernet-compatible for consistency.
 3. Update `GHOSTBACKUP_ENCRYPTION_KEY` in `.env.local`
 4. Restart the app and run another full backup
 5. Update your stored copy in the password manager
