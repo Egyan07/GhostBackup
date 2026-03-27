@@ -21,6 +21,7 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@testing-library/react": "15.0.7",
     "@testing-library/user-event": "14.5.2",
     "@vitejs/plugin-react": "4.3.1",
@@ -52,32 +53,41 @@
     "extraResources": [
       {
         "from": "backend",
-        "to":   "backend",
-        "filter": ["**/*"]
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "backend/config",
-        "to":   "config",
-        "filter": ["**/*"]
+        "to": "config",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
-      "target": ["nsis"],
-      "icon":   "assets/icon.ico"
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
-      "icon":   "assets/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png",
       "category": "Utility"
     },
     "nsis": {
-      "oneClick":             false,
+      "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon":        "assets/icon.ico",
-      "installerHeaderIcon":  "assets/icon.ico",
+      "installerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName":         "GhostBackup"
+      "shortcutName": "GhostBackup"
     }
   }
 }
