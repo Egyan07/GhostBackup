@@ -3,7 +3,6 @@ const js = require("@eslint/js");
 module.exports = [
   js.configs.recommended,
   {
-    // JSX files — need React plugin for JSX parsing
     files: ["src/**/*.{js,jsx}"],
     languageOptions: {
       parserOptions: {
@@ -14,7 +13,6 @@ module.exports = [
         },
       },
       globals: {
-        // Browser globals (fixes 'window', 'fetch', 'URLSearchParams')
         window: "readonly",
         fetch: "readonly",
         URLSearchParams: "readonly",
@@ -24,6 +22,12 @@ module.exports = [
         clearTimeout: "readonly",
         setInterval: "readonly",
         clearInterval: "readonly",
+        // ADD THESE:
+        Event: "readonly",
+        Blob: "readonly",
+        URL: "readonly",
+        navigator: "readonly",
+        confirm: "readonly",
       },
     },
     rules: {
@@ -32,7 +36,6 @@ module.exports = [
     },
   },
   {
-    // Test files — need Node globals (fixes 'global')
     files: ["src/tests/**/*.{js,jsx}"],
     languageOptions: {
       globals: {
