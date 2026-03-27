@@ -12,7 +12,7 @@
     "build": "vite build",
     "build:electron": "npm run build && electron-builder",
     "preview": "vite preview",
-    "lint": "eslint src --ext .js,.jsx",
+    "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest"
   },
