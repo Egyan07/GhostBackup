@@ -330,7 +330,8 @@ MIT License
 - **Electron `shell:open-path` validation** (`main.js`): IPC handler now validates the path exists and is a directory before opening, preventing arbitrary file/executable execution from a compromised renderer.
 - **Credential injection prevention** (`main.js`): values written to `.env.local` are sanitized — newline, carriage return, double quote, and backslash characters are rejected.
 - **Notification server body limit** (`main.js`): HTTP notification server on port 8766 now caps request body at 10KB to prevent memory exhaustion from local processes.
-- **Dependencies updated**: `cryptography` 42.0.5 → 44.0.0, `fastapi` 0.111.0 → 0.115.0, `electron` 31.0.0 → 33.3.1. All carry known CVE patches.
+- **Dependencies updated**: `cryptography` 42.0.5 → 46.0.5, `fastapi` 0.111.0 → 0.135.2, `pydantic` 2.7.0 → 2.12.5, `uvicorn` 0.29.0 → 0.34.0, `python-multipart` 0.0.9 → 0.0.22, `PyYAML` 6.0.1 → 6.0.2, `xxhash` 3.4.1 → 3.5.0, `electron` 31.0.0 → 33.3.1. All carry known CVE patches (CVE-2024-12797, CVE-2026-26007, CVE-2024-53981, CVE-2026-24486, CVE-2025-54121, CVE-2025-62727).
+- **`package-lock.json` synced**: regenerated to match `package.json` — fixes `npm ci` failures in CI.
 - **CI security auditing** (`ci.yml`): added `pip-audit` and `npm audit` job to catch vulnerable dependencies automatically.
 
 ### Important Fixes
