@@ -5,6 +5,8 @@
 ### Automated Backup with Encryption & Audit Logging
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
+![Backend Coverage](https://img.shields.io/badge/coverage-82%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-338%20passing-brightgreen)
 ![GitHub issues](https://img.shields.io/github/issues/Egyan07/GhostBackup)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Egyan07/GhostBackup)
 ![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
@@ -12,6 +14,10 @@
 **Author: [Egyan07](https://github.com/Egyan07)**
 
 GhostBackup is a secure automated backup system built with **Electron, React, and Python FastAPI**. Originally built for and actively deployed at Red Parrot Accounting (UK) — open source and free for any small business with similar needs.
+
+---
+
+> **In 30 seconds:** GhostBackup runs on a dedicated Windows machine, backs up your source folders to one or two local SSDs on a daily schedule, encrypts every file with AES-256-GCM, verifies integrity with xxhash, and emails you if anything fails. No cloud. No subscriptions. No IT staff required.
 
 ---
 
@@ -43,10 +49,12 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | Dashboard | Live Run | Restore |
 |-----------|----------|---------|
 | ![Dashboard](screenshots/Dashboard.png) | ![Live Run](screenshots/Live%20Run.png) | ![Restore](screenshots/Restore.png) |
+| *Last run summary, SSD usage, and next scheduled backup* | *Live progress, per-library status, and file feed during an active run* | *Date and library selection with dry-run preview mode* |
 
 | Email Alert |
 |-------------|
 | ![Email Alert](screenshots/Email%20Alerts.png) |
+| *SMTP verification email confirming alerts are configured correctly* |
 
 ---
 
@@ -107,6 +115,8 @@ Before adopting GhostBackup, understand what it **does not** do:
 - [Python 3.10+](https://www.python.org/downloads/) — **must be added to PATH during installation**
 - [Node.js 18+](https://nodejs.org/)
 - At least one dedicated backup drive (SSD recommended)
+- ~200MB free disk space for dependencies
+- Internet connection required during install (for `pip install` and `npm install`)
 
 ### Installation
 
@@ -497,6 +507,12 @@ Your `config.yaml` and `.env.local` will not be overwritten.
 
 ---
 
+**Q: Where are the log files for undiagnosed issues?**
+
+**A:** Logs are written to `backend/logs/` and also visible in the app under Logs & History. For backend errors not shown in the UI, check `backend/logs/ghostbackup.log`. You can filter by INFO, WARN, and ERROR levels in the Logs page.
+
+---
+
 ## 🤝 Contributing
 
 Originally built for Red Parrot Accounting, now open-sourced under MIT. Contributions are welcome.
@@ -509,6 +525,8 @@ Originally built for Red Parrot Accounting, now open-sourced under MIT. Contribu
    npm test
    ```
 4. Open a pull request with a clear description of what changed and why
+
+**Code style:** Follow existing patterns in the codebase. Run `eslint src` for frontend and `flake8 backend/` for backend before submitting. No new dependencies without discussion.
 
 **Areas where contributions are especially welcome:**
 - Linux/macOS support
