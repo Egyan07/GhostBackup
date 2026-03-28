@@ -16,7 +16,7 @@ xxhash==3.5.0          # ~10 GB/s file hashing for change detection
 psutil==5.9.8          # disk usage stats, filesystem type
 
 # Encryption at rest (AES-256-GCM streaming + Fernet legacy — accounting data compliance)
-cryptography==46.0.5
+cryptography==44.0.2
 
 # File watching (real-time sync)
 watchdog==4.0.1

@@ -90,11 +90,12 @@ body {
 
 /* ─── SIDEBAR ─── */
 .sidebar {
-  width: 220px; min-width: 220px;
+  width: 220px; min-width: 220px; max-width: 220px;
+  flex-shrink: 0; flex-grow: 0;
   background: var(--bg-surface);
   border-right: 1px solid var(--border-subtle);
   display: flex; flex-direction: column;
-  padding: 0;
+  padding: 0; overflow: hidden;
 }
 
 .sidebar-logo {
@@ -293,9 +294,10 @@ body {
 }
 
 /* ─── GRIDS ─── */
-.grid-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.grid-3   { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.grid-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-width: 0; }
+.grid-3   { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; min-width: 0; }
+.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; min-width: 0; }
+.grid-2 > *, .grid-3 > *, .grid-2-1 > * { min-width: 0; }
 
 /* ─── HEATMAP ─── */
 .heatmap { display: flex; gap: 3px; flex-wrap: wrap; }
