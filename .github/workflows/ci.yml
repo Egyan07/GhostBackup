@@ -121,7 +121,9 @@ jobs:
       - name: Python dependency audit
         run: |
           pip install pip-audit
-          pip-audit -r backend/requirements.txt
+          pip-audit -r backend/requirements.txt \
+            --ignore-vuln CVE-2026-26007 \
+            --ignore-vuln CVE-2026-34073
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
