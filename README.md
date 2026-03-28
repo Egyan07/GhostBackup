@@ -328,6 +328,14 @@ Then relaunch via `start.bat`.
 
 **A:** Check the green dot in the sidebar — if it's grey or red, the scheduler isn't running (restart the app). Also verify `schedule.time` and `schedule.timezone` in `config.yaml` are correct for your timezone.
 
+**Q: The dashboard shows "No runs yet" even after a backup completed.**
+
+**A:** The dashboard pulls data from the local SQLite database. If you moved or deleted `backend/ghostbackup.db`, history is lost. Do not delete this file — it contains your entire backup run history and audit trail.
+
+**Q: A file was backed up but I can't find it on the SSD.**
+
+**A:** Encrypted backups are stored with a `.ghostenc` extension and are not human-readable. They must be restored through GhostBackup's Restore page — do not try to open them directly.
+
 ---
 
 ## 🤝 Contributing
