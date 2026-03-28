@@ -1,5 +1,7 @@
 # 👻 GhostBackup
 
+> ⚠️ **Windows Only** — macOS and Linux are not supported. The app may not install or run correctly on those platforms.
+
 ### Automated Backup with Encryption & Audit Logging
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
@@ -9,9 +11,7 @@
 
 **Author: [Egyan07](https://github.com/Egyan07)**
 
-GhostBackup is a secure automated backup system built with **Electron, React, and Python FastAPI**. Originally built for and actively deployed at Red Parrot Accounting (UK) — open source and free for any small business to use.
-
-> **Platform:** Windows (fully supported). macOS and Linux are not officially supported — the app may not install or run correctly on those platforms.
+GhostBackup is a secure automated backup system built with **Electron, React, and Python FastAPI**. Originally built for and actively deployed at Red Parrot Accounting (UK) — open source and free for any small business with similar needs.
 
 ---
 
@@ -20,6 +20,7 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 - [Screenshots](#-screenshots)
 - [Tech Stack](#-tech-stack)
 - [Features](#-features)
+- [Limitations](#-limitations)
 - [Quick Start](#-quick-start)
 - [Testing](#-testing)
 - [Architecture](#-architecture)
@@ -28,7 +29,7 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 - [Environment Variables](#-environment-variables)
 - [Project Structure](#-project-structure)
 - [Security](#-security)
-- [Retention & Audit](#-retention--audit)
+- [Retention & Auditability](#-retention--auditability)
 - [Troubleshooting](#-troubleshooting)
 - [Contributing](#-contributing)
 - [Use Cases](#-use-cases)
@@ -63,46 +64,114 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 
 | Feature | Description |
 |---------|-------------|
-| 🔐 Encryption at Rest | AES-256-GCM streaming encryption (constant memory usage) |
-| 🔒 API Security | Auto-generated session API tokens per launch |
-| 📜 Retention & Audit | Configurable retention periods with guard-day protection |
-| 💾 Dual-SSD Redundancy | Primary and secondary SSD with physical rotation support |
-| ⏰ Scheduled Backups | Daily automated backups with configurable time + timezone |
-| 👁️ Real-Time File Watching | Monitors source folders and triggers incremental backup on changes (15s debounce, 120s cooldown) |
-| 🛑 Failure Threshold Abort | Aborts a library if >5% of files fail (minimum 3 failures) — other libraries continue |
-| ✅ Integrity Verification | `/verify` endpoint re-hashes all backed-up files |
-| 📚 Audit Trail | All configuration changes logged with timestamps |
-| 📧 Email Alerts | SMTP failure alerts and run summaries |
+| 🔐 Encryption at Rest | AES-256-GCM streaming encryption via Python `cryptography` library. Constant memory usage regardless of file size. Per-file random nonce. Versioned encryption header for future key rotation. |
+| 🔒 API Security | Auto-generated session token per launch via `crypto.randomBytes(32)`. All endpoints authenticated via `X-API-Key` header with timing-safe comparison (`hmac.compare_digest`). |
+| 💾 Dual-SSD Redundancy | Primary and secondary SSD support. Combined with the original source, this gives you 3 copies across 2 drives. Offsite copy is your responsibility — GhostBackup handles the local copies. |
+| ⏰ Scheduled Backups | Daily automated backups via APScheduler with configurable time and timezone. |
+| 👁️ Real-Time File Watching | Watchdog-based file system monitor. Detects changes and triggers incremental backup (15s debounce, 120s cooldown between triggers). |
+| 🛑 Failure Threshold Abort | If more than 5% of files fail during a library run (minimum 3 failures), that library is aborted. Other libraries continue. Threshold is configurable. |
+| ✅ Integrity Verification | `/verify` endpoint re-hashes every backed-up file using xxhash and compares against stored checksums. |
+| 📚 Audit Trail | Every configuration change is logged with UTC timestamp and hostname. Full backup history with per-file status stored in SQLite. |
+| 📧 Email Alerts | SMTP-based failure alerts and run summaries. Supports Gmail App Passwords and standard SMTP providers. |
+
+---
+
+## ⚠️ Limitations
+
+Before adopting GhostBackup, understand what it **does not** do:
+
+| Limitation | Detail |
+|------------|--------|
+| **Windows only** | Requires Windows 10/11. No Linux or macOS support. |
+| **Local drives only** | Backs up to directly attached drives (internal/external SSDs). No cloud, NAS, or network share support. |
+| **No offsite copy** | GhostBackup handles local redundancy only. Offsite backup is your responsibility. |
+| **No deduplication** | Changed files are copied in full on each backup run. No block-level or byte-level dedup. |
+| **Single machine** | No multi-user or networked deployment. If the machine is offline, no backup runs. |
+| **Files only** | Restores individual files/folders — not OS images. Pair with Macrium Reflect Free for full system recovery. |
+| **Locked files** | Files held open by other processes (e.g. open Excel) are retried but may be skipped. Check logs after each run. |
+| **Long paths** | Paths over 260 characters may fail unless Windows long path support is enabled (`HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`). |
+| **Scale** | Tested up to ~50GB source data. Performance on 500GB+ datasets is untested. |
+| **No external security audit** | Encryption and authentication use industry-standard libraries but have not been reviewed by a third-party security firm. |
+| **Encryption key in plaintext** | The key is stored in `.env.local` on disk. If you lose it, **all encrypted backups are permanently unrecoverable.** |
+| **Not legal compliance** | GhostBackup provides tools that *support* compliance. It is not a compliance certification. |
 
 ---
 
 ## 🚀 Quick Start
 
-**Windows setup:**
+**Windows guided setup (~5 minutes):**
 
-**Prerequisites:** [Python 3.10+](https://www.python.org/downloads/) (add to PATH during install) and [Node.js 18+](https://nodejs.org/)
+### Prerequisites
 
-1. Clone the repository
-2. Double-click **`install.bat`** — creates virtualenv, installs dependencies, runs setup wizard
-3. Follow the prompts — SSD path, source folders, and encryption key are configured interactively
-4. Double-click **`start.bat`** to launch (recreate with `install.bat` if missing)
+- Windows 10 or 11
+- [Python 3.10+](https://www.python.org/downloads/) — **must be added to PATH during installation**
+- [Node.js 18+](https://nodejs.org/)
+- At least one dedicated backup drive (SSD recommended)
 
-> **Note:** Admin privileges are not required. Expected install time: 2–5 minutes depending on network speed.
+### Installation
 
-> Full step-by-step instructions in **[SETUP.md](SETUP.md)**.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Egyan07/GhostBackup.git
+   cd GhostBackup
+   ```
+
+2. Run the guided installer:
+   ```
+   install.bat
+   ```
+   This will:
+   - Install Python and Node.js dependencies
+   - Prompt you to select backup source folders
+   - Prompt you to select primary (and optionally secondary) SSD drive
+   - Generate an AES-256 encryption key and store it in `.env.local`
+   - Create `backend/config/config.yaml` from the template
+
+3. Launch GhostBackup:
+   ```
+   start.bat
+   ```
+
+> **Note:** Admin privileges are not required. Expected install time: 2–5 minutes.
+
+> Full step-by-step guide: **[SETUP.md](SETUP.md)**
+
+### If something goes wrong during install
+
+- **Python not found:** Reinstall Python and check "Add to PATH" during setup
+- **Permission errors:** Run `install.bat` as Administrator
+- **Port 8765 in use:** Another instance may be running in the tray. Right-click tray icon → Quit GhostBackup, then retry
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Backend (278 tests, 82% coverage)
+# Backend — 278 tests, 82% line coverage
 cd backend
 python -m pytest tests/ -v --cov=. --cov-report=term-missing
 
-# Frontend (60 tests)
+# Frontend — 60 tests
 npm test
 ```
+
+| Suite | Tests | Coverage | Type | CI |
+|-------|-------|----------|------|----|
+| Backend | 278 | 82% line | Unit + integration | ✅ GitHub Actions |
+| Frontend | 60 | — | Unit (Vitest) | ✅ GitHub Actions |
+
+**What's tested:**
+- Backup engine (scan, encrypt, copy, verify, prune)
+- API endpoints (auth, config, runs, restore, alerts)
+- Configuration management and audit logging
+- Scheduler and file watcher lifecycle
+- Email alert formatting and delivery
+- Failure threshold behavior
+
+**What's not tested:**
+- End-to-end Electron → backend → disk pipeline (manual testing only)
+- Performance at scale beyond ~50GB
+- Multi-drive failure scenarios
 
 ---
 
@@ -110,28 +179,39 @@ npm test
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ELECTRON                                                    │
+│ ELECTRON (main.js)                                          │
 │ • Generates API token (crypto.randomBytes)                  │
-│ • Spawns Python backend process                             │
+│ • Spawns Python backend as child process                    │
+│ • System tray integration                                   │
+│ • If Electron exits, Python process is terminated           │
 └──────────────────────────┬──────────────────────────────────┘
+                           │ token via environment
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ FASTAPI BACKEND (default port 8765)                         │
+│ FASTAPI BACKEND (port 8765)                                 │
 │                                                             │
-│ 🔒 Authentication Middleware                                │
-│ Requires X-API-Key header for all endpoints except /health  │
+│ 🔒 Auth Middleware (X-API-Key on all routes except /health) │
 │                                                             │
-│ ⏰ Scheduler         👁️ File Watcher                        │
+│ ⏰ APScheduler          👁️ Watchdog File Watcher             │
+│ (daily cron job)        (15s debounce, 120s cooldown)       │
 │                                                             │
-│ Backup Engine                                               │
-│  ├─ 🔐 Encrypt files (AES-256-GCM streaming)                │
-│  ├─ 💾 Copy to primary and secondary drives                 │
-│  ├─ ✅ Verify integrity using xxhash                        │
-│  └─ 📚 Log results to SQLite                                │
+│ Backup Engine (syncer.py)                                   │
+│  ├─ Scan source folders for new/changed files               │
+│  ├─ Encrypt each file (AES-256-GCM, per-file nonce, 4MB chunks) │
+│  ├─ Copy to primary SSD (and secondary if configured)       │
+│  ├─ Verify copy integrity (xxhash comparison)               │
+│  ├─ Abort library if failure rate exceeds threshold (5%)    │
+│  └─ Log every file result to SQLite                         │
+│                                                             │
+│ SQLite Database                                             │
+│  ├─ Backup runs with timestamps and status                  │
+│  ├─ Per-file records (hash, size, status, error)            │
+│  └─ Configuration audit trail                               │
 └─────────────────────────────────────────────────────────────┘
                            ▲
+                           │ HTTP (localhost only, polling)
 ┌──────────────────────────┴──────────────────────────────────┐
-│ REACT FRONTEND                                              │
+│ REACT FRONTEND (Chromium sandbox enabled, CSP active)       │
 │ • Dashboard  • Live Run  • Logs                             │
 │ • Restore    • Settings  • Alert Bell                       │
 └─────────────────────────────────────────────────────────────┘
@@ -143,34 +223,61 @@ npm test
 
 All endpoints require the **X-API-Key header** except `/health`.
 
+**Core**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | /health | Health check (no auth required) |
 | GET | /dashboard | Dashboard summary stats |
+
+**Backup Runs**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /run/start | Start a backup run |
+| POST | /run/stop | Cancel the active run |
 | GET | /run/status | Active run state |
-| POST | /run/start | Start backup |
-| POST | /run/stop | Cancel running backup |
-| POST | /verify | Verify backup integrity |
-| GET | /runs | Backup history |
+| POST | /verify | Re-hash all backed-up files and report mismatches |
+| GET | /runs | Backup run history |
 | GET | /runs/:id | Single run detail |
-| GET | /runs/:id/logs | Run log entries |
-| POST | /restore | Restore files |
+| GET | /runs/:id/logs | Per-file log entries for a run |
+
+**Restore**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /restore | Restore files (path traversal validated) |
+
+**Configuration**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | GET | /config | Current configuration |
 | PATCH | /config | Update configuration |
-| GET | /config/audit | Configuration audit trail |
-| POST | /config/sites | Add backup source folder |
-| PATCH | /config/sites/:name | Update source folder |
-| DELETE | /config/sites/:name | Remove source folder |
-| GET | /ssd/status | SSD health and disk usage |
-| GET | /alerts | In-app alert list |
-| POST | /alerts/:id/dismiss | Dismiss alert |
-| POST | /alerts/dismiss-all | Dismiss all alerts |
-| PATCH | /settings/smtp | Update SMTP settings |
-| POST | /settings/smtp/test | Send test email |
+| GET | /config/audit | Configuration change audit trail |
+| POST | /config/sites | Add a backup source folder |
+| PATCH | /config/sites/:name | Update a source folder |
+| DELETE | /config/sites/:name | Remove a source folder |
+
+**Settings**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| PATCH | /settings/smtp | Update SMTP email settings |
+| POST | /settings/smtp/test | Send a test email |
 | PATCH | /settings/retention | Update retention policy |
-| POST | /settings/prune | Run prune job |
-| POST | /settings/encryption/generate-key | Generate new encryption key |
-| GET | /watcher/status | File watcher status |
+| POST | /settings/prune | Manually trigger prune job |
+| POST | /settings/encryption/generate-key | Generate a new encryption key |
+
+**Monitoring**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /ssd/status | Disk usage and health for configured drives |
+| GET | /alerts | In-app alert list |
+| POST | /alerts/:id/dismiss | Dismiss a single alert |
+| POST | /alerts/dismiss-all | Dismiss all alerts |
+| GET | /watcher/status | File watcher running state |
 | POST | /watcher/start | Start file watcher |
 | POST | /watcher/stop | Stop file watcher |
 
@@ -178,12 +285,12 @@ All endpoints require the **X-API-Key header** except `/health`.
 
 ## ⚙️ Configuration
 
-Config file location: `backend/config/config.yaml`
-Copy template from: `backend/config/config.yaml.example`
+Location: `backend/config/config.yaml`
+Template: `backend/config/config.yaml.example`
 
 ```yaml
 ssd_path: "D:\\GhostBackup"
-secondary_ssd_path: "E:\\GhostBackup2"   # optional
+secondary_ssd_path: "E:\\GhostBackup2"   # optional — leave blank to disable
 
 encryption:
   enabled: true   # requires GHOSTBACKUP_ENCRYPTION_KEY in .env.local
@@ -194,30 +301,36 @@ sources:
     enabled: true
 
 retention:
-  daily_days: 365
-  weekly_days: 2555
-  compliance_years: 7
-  guard_days: 7
+  daily_days: 365         # keep daily backups for 1 year
+  weekly_days: 2555       # keep weekly backups for 7 years
+  compliance_years: 7     # minimum retention floor
+  guard_days: 7           # prevent accidental deletion of recent backups
 
 schedule:
   time: "08:00"
   timezone: "Europe/London"
 
-circuit_breaker_threshold: 0.05
+circuit_breaker_threshold: 0.05   # abort library if >5% of files fail
 ```
 
 ---
 
 ## 🔑 Environment Variables
 
+Store secrets in `.env.local` in the project root. This file must never be committed (already in `.gitignore`).
+
+```bash
+GHOSTBACKUP_ENCRYPTION_KEY=your-base64-key-here
+GHOSTBACKUP_SMTP_PASSWORD=your-smtp-password
+# GHOSTBACKUP_API_PORT=8765
+```
+
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GHOSTBACKUP_ENCRYPTION_KEY` | Yes (if encryption enabled) | Base64-encoded Fernet key — HKDF-derived to 256-bit AES key. Generate via Settings → Encryption. |
-| `GHOSTBACKUP_SMTP_PASSWORD` | Yes (if email alerts enabled) | SMTP password |
-| `GHOSTBACKUP_API_PORT` | No (default: 8765) | API server port |
-| `GHOSTBACKUP_API_TOKEN` | Auto | Generated by Electron on each launch |
-
-Store secrets in `.env.local` — never commit this file.
+| `GHOSTBACKUP_ENCRYPTION_KEY` | Yes (if encryption enabled) | Base64-encoded Fernet key — HKDF-derived to 256-bit AES. Generated by `install.bat`. **If lost, all encrypted backups are unrecoverable.** |
+| `GHOSTBACKUP_SMTP_PASSWORD` | Yes (if email alerts enabled) | SMTP password. For Gmail, use an App Password. |
+| `GHOSTBACKUP_API_PORT` | No (default: 8765) | Port for the FastAPI backend. |
+| `GHOSTBACKUP_API_TOKEN` | Auto | Generated by Electron on each launch. Do not set manually. |
 
 ---
 
@@ -226,35 +339,35 @@ Store secrets in `.env.local` — never commit this file.
 ```
 GhostBackup/
 │
-├── install.bat              ← run this first on a new machine
+├── install.bat              ← guided first-time setup
 │
 ├── backend/
 │   ├── config/
 │   │   ├── config.yaml.example
-│   │   └── config.yaml
-│   ├── api.py               ← FastAPI server (default port 8765)
-│   ├── config.py            ← ConfigManager
-│   ├── manifest.py          ← SQLite run/file/audit database
-│   ├── reporter.py          ← AlertManager + SMTP email
-│   ├── scheduler.py         ← APScheduler daily job + watchdog
-│   ├── setup_helper.py      ← called by install.bat
-│   ├── syncer.py            ← file scan, encrypt, copy, verify, prune
-│   ├── utils.py             ← shared fmt_bytes / fmt_duration helpers
+│   │   └── config.yaml      ← your configuration (generated by install.bat)
+│   ├── api.py               ← FastAPI server
+│   ├── config.py            ← ConfigManager (load, validate, audit)
+│   ├── manifest.py          ← SQLite database (runs, files, audit trail)
+│   ├── reporter.py          ← AlertManager + SMTP email delivery
+│   ├── scheduler.py         ← APScheduler daily job
+│   ├── setup_helper.py      ← called by install.bat for guided setup
+│   ├── syncer.py            ← backup engine (scan, encrypt, copy, verify, prune)
+│   ├── utils.py             ← shared helpers (fmt_bytes, fmt_duration)
 │   ├── watcher.py           ← watchdog real-time file watcher
 │   └── tests/               ← 278 pytest tests
 │
 ├── electron/
-│   ├── main.js              ← main process, spawns backend, tray
+│   ├── main.js              ← Electron main process (spawns backend, tray)
 │   └── preload.js           ← contextBridge API surface
 │
 ├── src/
-│   ├── GhostBackup.jsx      ← app shell + navigation
-│   ├── main.jsx             ← React entry point + backend poller
+│   ├── GhostBackup.jsx      ← app shell + sidebar navigation
+│   ├── main.jsx             ← React entry point + backend health poller
 │   ├── api-client.js        ← authenticated fetch wrapper
-│   ├── styles.css           ← all app styles
-│   ├── splash.css           ← splash screen styles
+│   ├── styles.css           ← application styles
+│   ├── splash.css           ← splash/loading screen styles
 │   ├── components/          ← reusable UI components
-│   ├── pages/               ← full-page views
+│   ├── pages/               ← full-page views (Dashboard, Restore, Settings, etc.)
 │   └── tests/               ← 60 vitest tests
 │
 ├── screenshots/             ← README screenshots
@@ -268,41 +381,53 @@ GhostBackup/
 
 | Layer | Implementation |
 |-------|----------------|
-| Encryption | AES-256-GCM streaming with version header (key rotation ready) |
-| API Authentication | Timing-safe session tokens (`hmac.compare_digest`) |
-| Path Safety | Path traversal validation on restore endpoint |
-| Electron Sandbox | Chromium sandbox enabled, CSP in dev + production |
-| Credential Safety | Input sanitization on credential writes to `.env.local` |
-| Database Safety | SQLite with `PRAGMA synchronous=FULL`, batched commits |
-| Process Safety | Process name verification before port conflict termination |
-| Data Integrity | xxhash verification after every copy |
-| Failure Control | Circuit breaker at 5% file failure threshold |
+| Encryption | AES-256-GCM via Python `cryptography` library. Streaming with constant memory. Per-file random nonce (`os.urandom`). Versioned header (v1) for key rotation support. |
+| API Authentication | Session token via `crypto.randomBytes(32)` per launch. Validated with `hmac.compare_digest` (timing-safe). |
+| Path Safety | Restore endpoint validates all paths against traversal attacks before any file operation. |
+| Electron Sandbox | Chromium sandbox enabled. CSP enforced in both dev and production builds. |
+| Credential Storage | Secrets in `.env.local` with input sanitization on writes. Excluded from version control. |
+| Database Integrity | SQLite with `PRAGMA synchronous=FULL` and batched commits to prevent corruption on unexpected shutdown. |
+| Process Safety | Before killing a conflicting process on port 8765, GhostBackup verifies it's a Python/GhostBackup process. Will not kill unrelated processes. |
+| Data Integrity | xxhash checksum computed at source, verified after every copy to primary and secondary drives. |
+| Failure Protection | Configurable failure threshold (default 5%, min 3 files). If exceeded per library, that library aborts. |
+
+**What's NOT covered:**
+- No external penetration testing or third-party security audit
+- Encryption key stored in plaintext in `.env.local` — protect with OS-level permissions
+- API is localhost-only with no TLS (acceptable for local Electron ↔ backend communication)
+
+**Vulnerability Reporting:**
+Open a GitHub issue or contact the author directly. Do not include exploit details in public issues.
 
 ---
 
-## 📜 Retention & Audit
+## 📜 Retention & Auditability
 
-> **Disclaimer:** GhostBackup provides configurable retention and audit logging that can support compliance workflows, but does not itself constitute legal compliance. Consult a legal professional for GDPR, UK Companies Act, or other regulatory requirements specific to your business.
+> **Disclaimer:** GhostBackup provides tools that *support* regulatory compliance — retention policies, audit trails, encryption at rest, and integrity verification. It is not a compliance certification. Consult a qualified legal or compliance professional for your jurisdiction (e.g. UK Companies Act 2006, GDPR, HMRC record-keeping).
 
-| Feature | Detail |
-|---------|--------|
-| Daily retention | 365 days (configurable) |
-| Weekly retention | 2555 days / 7 years (configurable) |
-| Guard days | 7 days — prevents accidental pruning of recent backups |
-| Audit trail | All config changes logged with UTC timestamp + hostname |
-| Integrity check | `/verify` endpoint re-hashes all backup files on demand |
+**Retention Settings**
 
----
+| Policy | Default | Purpose |
+|--------|---------|---------|
+| Daily retention | 365 days | Keep daily snapshots for 1 year |
+| Weekly retention | 2,555 days | Keep weekly snapshots for 7 years |
+| Compliance floor | 7 years | Minimum retention — cannot be reduced below this |
+| Guard days | 7 days | Prevents accidental pruning of the most recent backups |
 
-## ⚠️ Limitations
+**Audit Capabilities**
 
-- **No offsite backup**: both SSDs are local. Pair with physical drive rotation for disaster recovery.
-- **Files only, not OS images**: restores individual files/folders. For full system recovery, pair with a disk imaging tool (e.g. Macrium Reflect Free).
-- **Locked files**: files held open by other processes (e.g. open Excel sheets) are retried but may still be skipped. Check logs after each run.
-- **Windows long paths**: paths over 260 characters may fail unless long path support is enabled in Windows (`HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`).
-- **Single machine**: the scheduler, watcher, and dashboard all run on one machine. If that machine is offline, no backup runs.
-- **Scale**: tested up to ~50GB source data. Performance on very large datasets (500GB+) is untested.
-- **No bare-metal restore test**: always verify you can restore from backups before relying on them in production. Run `/verify` regularly.
+| Capability | Detail |
+|------------|--------|
+| Configuration audit trail | Every config change logged with timestamp, hostname, and previous value |
+| Backup run history | Every run recorded with start/end time, file count, success/failure counts |
+| Per-file records | Each file's hash, size, status, and any error message stored in SQLite |
+| Integrity verification | `/verify` endpoint re-hashes all backup files and reports any mismatches |
+
+**Your Responsibilities**
+- **GDPR:** If backing up personal data, conduct your own data protection impact assessment. Consider how right-to-erasure requests interact with long-term retention.
+- **Key management:** Back up your encryption key securely. If lost, all encrypted backups are permanently unrecoverable.
+- **Restore testing:** Periodically verify you can actually restore from backups. GhostBackup provides the tools — you must verify they work for your data.
+- **Offsite copy:** GhostBackup handles local redundancy only. You are responsible for maintaining an offsite copy.
 
 ---
 
@@ -310,7 +435,9 @@ GhostBackup/
 
 **Q: I get "port already in use" every time I open the app.**
 
-**A:** You closed the app with the X button, which hides it to tray — it was still running in the background. Always quit via File → Exit or right-click the tray icon → Quit GhostBackup. This fully exits and releases port 8765.
+**A:** Closing with the X button hides the app to tray — it was still running. Always quit via File → Exit or right-click tray icon → Quit GhostBackup. This fully exits and releases port 8765.
+
+---
 
 **Q: The splash screen shows "backup service stopped unexpectedly (exit code 1)".**
 
@@ -320,48 +447,90 @@ pip install -r backend/requirements.txt
 ```
 Then relaunch via `start.bat`.
 
+---
+
 **Q: Email alerts aren't arriving.**
 
-**A:** Make sure you're using a Gmail App Password, not your regular Gmail password. Generate one at `https://myaccount.google.com/apppasswords`. In Settings, set SMTP host to `smtp.gmail.com`, port `587`, enter your Gmail address in both From and Recipients, save — then click Send Test Email to verify.
+**A:** If using Gmail, you need an App Password — not your regular password. Generate one at `https://myaccount.google.com/apppasswords`. In Settings configure: SMTP host `smtp.gmail.com`, port `587`, your Gmail in both From and Recipients. Save, then click Send Test Email.
+
+---
 
 **Q: The backup isn't running at the scheduled time.**
 
-**A:** Check the green dot in the sidebar — if it's grey or red, the scheduler isn't running (restart the app). Also verify `schedule.time` and `schedule.timezone` in `config.yaml` are correct for your timezone.
+**A:** Check the sidebar status dot — green means running, grey/red means stopped (restart the app). Also verify `schedule.time` and `schedule.timezone` in `config.yaml` match your intended schedule.
+
+---
 
 **Q: The dashboard shows "No runs yet" even after a backup completed.**
 
-**A:** The dashboard pulls data from the local SQLite database. If you moved or deleted `backend/ghostbackup.db`, history is lost. Do not delete this file — it contains your entire backup run history and audit trail.
+**A:** The dashboard reads from `backend/ghostbackup.db`. If you moved or deleted this file, history is lost. Do not delete it — it contains your entire backup run history and audit trail.
+
+---
 
 **Q: A file was backed up but I can't find it on the SSD.**
 
-**A:** Encrypted backups are stored with a `.ghostenc` extension and are not human-readable. They must be restored through GhostBackup's Restore page — do not try to open them directly.
+**A:** Encrypted backups are stored with a `.ghostenc` extension and are not human-readable. Restore them through GhostBackup's Restore page — do not try to open them directly.
+
+---
+
+**Q: Can I back up to a network share or NAS?**
+
+**A:** No. GhostBackup currently supports only directly attached drives. Network and cloud backup are not supported.
+
+---
+
+**Q: What happens if power is lost during a backup?**
+
+**A:** The current run is marked as failed. SQLite uses `PRAGMA synchronous=FULL` so the database will not corrupt. On next launch, run a new backup normally — partially written files will be re-copied.
+
+---
+
+**Q: How do I update GhostBackup?**
+
+**A:** Pull the latest changes and reinstall dependencies:
+```bash
+git pull
+pip install -r backend/requirements.txt
+npm install
+```
+Your `config.yaml` and `.env.local` will not be overwritten.
 
 ---
 
 ## 🤝 Contributing
 
-This project is built for internal use at Red Parrot Accounting. Issues and pull requests are welcome for bug fixes and improvements.
+Originally built for Red Parrot Accounting, now open-sourced under MIT. Contributions are welcome.
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b fix/your-fix`)
-3. Run tests before submitting (`pytest backend/tests/` and `npm test`)
-4. Open a pull request with a clear description
+3. Run tests before submitting:
+   ```bash
+   cd backend && python -m pytest tests/ -v
+   npm test
+   ```
+4. Open a pull request with a clear description of what changed and why
+
+**Areas where contributions are especially welcome:**
+- Linux/macOS support
+- Network drive / NAS support
+- Additional test coverage (especially E2E and restore scenarios)
+- Documentation improvements
 
 ---
 
 ## 💼 Use Cases
 
-- Accounting firms (UK Companies Act 2006 compliance)
-- Legal offices
-- Financial services
-- Medical record systems
-- Any business requiring encrypted, auditable, scheduled local backups
+- **Accounting firms** — long-term retention supporting UK Companies Act 2006 and HMRC requirements
+- **Legal offices** — encrypted client file backups with full audit trail
+- **Financial services** — scheduled, verifiable backups with failure alerting
+- **Medical practices** — encrypted patient record backups (verify GDPR/NHS DSPT requirements separately)
+- **Any small business** — that needs encrypted, automated, auditable local backups without cloud dependency
 
 ---
 
 ## 📄 License
 
-MIT License
+MIT License — see LICENSE for full text.
 
 ---
 
@@ -371,4 +540,4 @@ Full version history available in **[CHANGELOG.md](CHANGELOG.md)**.
 
 ---
 
-*👻 GhostBackup — Silent. Secure. Compliant.*
+*👻 GhostBackup — Silent. Secure. Auditable.*
