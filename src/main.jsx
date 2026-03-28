@@ -18,6 +18,16 @@ function BackendProvider() {
   const [state, setState]         = useState("loading");
   const [crashCode, setCrashCode] = useState(null);
 
+  // Add/remove splash-active class on body so splash.css styles
+  // don't bleed into the main app layout
+  useEffect(() => {
+    if (state !== "ready") {
+      document.body.classList.add("splash-active");
+    } else {
+      document.body.classList.remove("splash-active");
+    }
+  }, [state]);
+
   useEffect(() => {
     if (!window.ghostbackup) {
       setState("ready");
