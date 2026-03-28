@@ -119,8 +119,11 @@ Create a file named `.env.local` in the project root:
 
 ```
 GHOSTBACKUP_ENCRYPTION_KEY=<paste your key here>
+GHOSTBACKUP_HKDF_SALT=<generate with: python -c "import os; print(os.urandom(16).hex())">
 GHOSTBACKUP_SMTP_PASSWORD=<your Office 365 app password>
 ```
+
+`GHOSTBACKUP_HKDF_SALT` is a per-installation random value that strengthens encryption key derivation. Generate it once and store alongside your encryption key. If omitted, a static default is used (backward compatible but less secure).
 
 This file is excluded from version control. Never commit it.
 

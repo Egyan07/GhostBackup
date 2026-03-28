@@ -29,10 +29,20 @@ def main() -> int:
                 key = line.split("=", 1)[1].strip()
                 break
 
+    salt        = None
+    if env_path.exists():
+        existing = env_path.read_text(encoding="utf-8")
+        for line in existing.splitlines():
+            if line.startswith("GHOSTBACKUP_HKDF_SALT="):
+                salt = line.split("=", 1)[1].strip()
+                break
+
     if not key:
         try:
+            import os
             from cryptography.fernet import Fernet
-            key = Fernet.generate_key().decode()
+            key  = Fernet.generate_key().decode()
+            salt = os.urandom(16).hex()   # 16-byte random hex salt
             key_is_new = True
         except ImportError:
             print("[ERROR] cryptography package missing — run pip install -r backend/requirements.txt")
@@ -62,6 +72,7 @@ def main() -> int:
     if key_is_new:
         env_path.write_text(
             f"GHOSTBACKUP_ENCRYPTION_KEY={key}\n"
+            f"GHOSTBACKUP_HKDF_SALT={salt}\n"
             f"GHOSTBACKUP_SMTP_PASSWORD=\n",
             encoding="utf-8",
         )
