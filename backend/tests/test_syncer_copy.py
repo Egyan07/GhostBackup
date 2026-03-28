@@ -24,6 +24,7 @@ def _make_config(
     cfg.ssd_path              = ssd_path
     cfg.secondary_ssd_path    = secondary_ssd_path
     cfg.encryption_key        = encryption_key
+    cfg.hkdf_salt             = b"ghostbackup-stream-v1"
     cfg.encryption_config_enabled = bool(encryption_key)
     cfg.encryption_enabled    = bool(encryption_key)
     cfg.chunk_size_bytes      = 65536

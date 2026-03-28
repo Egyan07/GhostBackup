@@ -152,7 +152,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="2.5.3", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="2.6.0", lifespan=lifespan)
 
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
@@ -271,33 +271,48 @@ def _new_run_state(run_id: int, full: bool) -> dict:
 
 # ── Core backup job ───────────────────────────────────────────────────────────
 
-async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
+async def run_backup_job(
+    full: bool = False,
+    sources: list[str] = None,
+    cfg: ConfigManager = None,
+    manifest: ManifestDB = None,
+    reporter: Reporter = None,
+    syncer: LocalSyncer = None,
+    scheduler: BackupScheduler = None,
+) -> None:
     global _active_run
+    # Fall back to module-level globals when called from the scheduler
+    # or watcher (which cannot inject dependencies)
+    cfg      = cfg      or _config
+    manifest = manifest or _manifest
+    reporter = reporter or _reporter
+    syncer   = syncer   or _syncer
+    scheduler = scheduler or _scheduler
 
     with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
             logger.warning("Backup already running — skipping duplicate trigger")
             return
 
-        ssd_status = _syncer.check_ssd()
+        ssd_status = syncer.check_ssd()
         if ssd_status["status"] != "ok":
             err = ssd_status.get("error", "SSD unavailable")
             logger.error(f"Backup aborted — {err}")
-            await _reporter.alert_and_notify(
+            await reporter.alert_and_notify(
                 level="error", title="Backup aborted — SSD unavailable",
                 body=err, send_email=True,
             )
             return
 
-        run_id      = _manifest.create_run(full_backup=full)
+        run_id      = manifest.create_run(full_backup=full)
         _active_run = _new_run_state(run_id, full)
 
-    if _scheduler:
-        _scheduler.set_current_run_id(run_id)
+    if scheduler:
+        scheduler.set_current_run_id(run_id)
 
     try:
         target_sources = [
-            s for s in _config.get_enabled_sources()
+            s for s in cfg.get_enabled_sources()
             if not sources or (s.get("label") or s.get("name", "")) in sources
         ]
 
@@ -305,7 +320,7 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
             raise RuntimeError("No enabled source folders configured")
 
         total_sources = len(target_sources)
-        executor      = ThreadPoolExecutor(max_workers=_config.concurrency)
+        executor      = ThreadPoolExecutor(max_workers=cfg.concurrency)
 
         try:
             for idx, source in enumerate(target_sources):
@@ -330,13 +345,13 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                     "bytes":             0,
                 }
                 _active_run["libraries"][label] = lib_state
-                _manifest.log(run_id, "INFO", f"Scanning {label}: {source['path']}")
+                manifest.log(run_id, "INFO", f"Scanning {label}: {source['path']}")
 
                 try:
                     loop = asyncio.get_running_loop()
                     changed_files, skipped = await loop.run_in_executor(
                         executor,
-                        lambda s=source, f=full: _syncer.scan_source(s, force_full=f),
+                        lambda s=source, f=full: syncer.scan_source(s, force_full=f),
                     )
                     with _run_mutex:
                         _active_run["files_skipped"] += skipped
@@ -345,12 +360,12 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                     if total_files == 0:
                         lib_state["status"] = "success"
                         lib_state["pct"]    = 100
-                        _manifest.log(run_id, "INFO",
-                                      f"{label}: all files up-to-date, nothing to copy")
+                        manifest.log(run_id, "INFO",
+                                     f"{label}: all files up-to-date, nothing to copy")
                         continue
 
-                    _manifest.log(run_id, "INFO",
-                                  f"{label}: {total_files} files to copy, {skipped} skipped")
+                    manifest.log(run_id, "INFO",
+                                 f"{label}: {total_files} files to copy, {skipped} skipped")
 
                     speed_window = {"bytes": 0, "ts": time.monotonic()}
 
@@ -372,11 +387,11 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                         try:
                             backup_path = await loop.run_in_executor(
                                 executor,
-                                lambda fm=file_meta: _syncer.copy_file(
+                                lambda fm=file_meta: syncer.copy_file(
                                     fm, run_id, on_progress=_progress_cb
                                 ),
                             )
-                            _manifest.record_file(run_id, file_meta, backup_path)
+                            manifest.record_file(run_id, file_meta, backup_path)
                             with _run_mutex:
                                 lib_state["files_transferred"] += 1
                                 lib_state["bytes"] += file_meta["size"]
@@ -407,18 +422,18 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                                     "original_path": file_meta.get("original_path"),
                                     "file_meta":     dict(file_meta),
                                 })
-                            _manifest.log(run_id, "ERROR",
-                                          f"{file_meta['name']}: {err_msg}")
+                            manifest.log(run_id, "ERROR",
+                                         f"{file_meta['name']}: {err_msg}")
 
                             fail_rate = lib_state["files_failed"] / max(total_files, 1)
-                            threshold = _config.circuit_breaker_threshold
+                            threshold = cfg.circuit_breaker_threshold
                             if fail_rate > threshold and lib_state["files_failed"] >= 3:
                                 logger.error(
                                     f"Circuit breaker tripped: {label} "
                                     f"({fail_rate:.0%} failure, threshold {threshold:.0%})"
                                 )
                                 lib_state["status"] = "circuit_broken"
-                                await _reporter.send_circuit_breaker_alert(
+                                await reporter.send_circuit_breaker_alert(
                                     library=label,
                                     fail_rate_pct=fail_rate * 100,
                                     run_id=run_id,
@@ -434,7 +449,7 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                             )
 
                     # Flush batched manifest commits after each library
-                    _manifest.flush()
+                    manifest.flush()
 
                     if lib_state["status"] not in ("circuit_broken", "failed", "cancelled"):
                         lib_state["status"] = (
@@ -445,13 +460,13 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
                     logger.error(f"[{label}] Source missing: {src_err}")
                     lib_state["status"] = "failed"
                     _active_run["errors"].append({"library": label, "error": str(src_err)})
-                    _manifest.log(run_id, "ERROR", f"{label}: {src_err}")
+                    manifest.log(run_id, "ERROR", f"{label}: {src_err}")
 
                 except Exception as lib_err:
                     logger.error(f"[{label}] Library failed: {lib_err}")
                     lib_state["status"] = "failed"
                     _active_run["errors"].append({"library": label, "error": str(lib_err)})
-                    _manifest.log(run_id, "ERROR", f"{label}: {lib_err}")
+                    manifest.log(run_id, "ERROR", f"{label}: {lib_err}")
 
         finally:
             executor.shutdown(wait=True, cancel_futures=True)
@@ -473,24 +488,24 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
             _active_run["overall_pct"] = 100
             _active_run["finished_at"] = datetime.now(timezone.utc).isoformat()
 
-        _manifest.finalize_run(run_id, _active_run)
+        manifest.finalize_run(run_id, _active_run)
 
         await _retry_locked_files(run_id)
         await _backup_manifest_to_ssd()
-        await _reporter.send_run_report(_active_run)
+        await reporter.send_run_report(_active_run)
 
         logger.info(f"Run #{run_id} complete — {final_status}")
 
-        if final_status == "success" and _scheduler:
-            _scheduler.reset_missed_alert()
+        if final_status == "success" and scheduler:
+            scheduler.reset_missed_alert()
 
     except Exception as fatal_err:
         logger.error(f"Fatal backup error: {fatal_err}", exc_info=True)
         with _run_mutex:
             _active_run["status"]      = "failed"
             _active_run["finished_at"] = datetime.now(timezone.utc).isoformat()
-        _manifest.finalize_run(run_id, _active_run)
-        await _reporter.alert_and_notify(
+        manifest.finalize_run(run_id, _active_run)
+        await reporter.alert_and_notify(
             level="critical", title="GhostBackup fatal error",
             body=str(fatal_err), run_id=run_id, send_email=True,
         )
@@ -618,11 +633,18 @@ async def dashboard(cfg: ConfigManager = Depends(provide_config),
 @app.post("/run/start")
 @_limiter.limit("10/minute")
 async def start_run(request: Request, req: RunRequest, background_tasks: BackgroundTasks,
-                    cfg: ConfigManager = Depends(provide_config)):
+                    cfg: ConfigManager = Depends(provide_config),
+                    manifest: ManifestDB = Depends(get_manifest),
+                    reporter: Reporter = Depends(get_reporter),
+                    syncer: LocalSyncer = Depends(get_syncer),
+                    scheduler: BackupScheduler = Depends(get_scheduler)):
     with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
             raise HTTPException(409, "A backup run is already in progress")
-    background_tasks.add_task(run_backup_job, req.full, req.sources)
+    background_tasks.add_task(
+        run_backup_job, req.full, req.sources,
+        cfg, manifest, reporter, syncer, scheduler,
+    )
     return {"message": "Backup job started", "full": req.full}
 
 
@@ -679,9 +701,9 @@ async def update_config(req: ConfigUpdateRequest,
                         cfg: ConfigManager = Depends(provide_config),
                         scheduler: BackupScheduler = Depends(get_scheduler),
                         watcher: FileWatcher = Depends(get_watcher)):
-    updates        = req.model_dump(exclude_none=True)
+    updates         = req.model_dump(exclude_none=True)
     watcher_enabled = updates.pop("watcher_enabled", None)
-    cfg.update(updates)
+    ignored         = cfg.update(updates)
     if "schedule_time" in updates or "timezone" in updates:
         scheduler.reschedule(cfg.schedule_time, cfg.timezone)
     global _syncer
@@ -690,7 +712,10 @@ async def update_config(req: ConfigUpdateRequest,
         watcher.reload_sources()
     elif watcher_enabled is False and watcher and watcher.is_running:
         watcher.stop()
-    return {"message": "Config updated", "config": cfg.to_dict_safe()}
+    response = {"message": "Config updated", "config": cfg.to_dict_safe()}
+    if ignored:
+        response["ignored_keys"] = ignored
+    return response
 
 
 @app.post("/config/sites")

@@ -25,7 +25,9 @@ export default function AlertBell() {
 
   useEffect(() => {
     fetchAlerts();
-    const id = setInterval(fetchAlerts, 15000);
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") fetchAlerts();
+    }, 15000);
     return () => clearInterval(id);
   }, [fetchAlerts]);
 

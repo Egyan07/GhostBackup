@@ -52,6 +52,8 @@ class ManifestDB:
 
     # ── Schema ────────────────────────────────────────────────────────────────
 
+    _SCHEMA_VERSION = 2
+
     def _migrate(self) -> None:
         with self._lock:
             self._conn.executescript("""
@@ -123,11 +125,41 @@ class ManifestDB:
                 CREATE INDEX IF NOT EXISTS idx_hashes_path    ON file_hashes(source_path);
                 CREATE INDEX IF NOT EXISTS idx_audit_ts       ON config_audit(changed_at DESC);
             """)
-            # Ensure schema_version is populated
+            # Bootstrap schema_version if this is a fresh database
             row = self._conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()
             if row[0] == 0:
-                self._conn.execute("INSERT INTO schema_version (version) VALUES (1)")
-            self._conn.commit()
+                self._conn.execute("INSERT INTO schema_version (version) VALUES (0)")
+                self._conn.commit()
+
+        # Apply incremental migrations outside the executescript block
+        # so each step can be committed independently
+        with self._lock:
+            current = self._conn.execute(
+                "SELECT version FROM schema_version"
+            ).fetchone()[0]
+
+            if current < 1:
+                # v1: initial schema (already applied above via CREATE IF NOT EXISTS)
+                self._conn.execute(
+                    "UPDATE schema_version SET version = 1"
+                )
+                self._conn.commit()
+                current = 1
+                logger.info("DB migrated to schema v1")
+
+            if current < 2:
+                # v2: add library_summary alias column for backward compat queries
+                try:
+                    self._conn.execute(
+                        "ALTER TABLE runs ADD COLUMN library_summary TEXT"
+                    )
+                except Exception:
+                    pass  # column may already exist on older DBs
+                self._conn.execute(
+                    "UPDATE schema_version SET version = 2"
+                )
+                self._conn.commit()
+                logger.info("DB migrated to schema v2")
 
     # ── Run lifecycle ─────────────────────────────────────────────────────────
 
@@ -203,6 +235,9 @@ class ManifestDB:
 
     # ── File records ──────────────────────────────────────────────────────────
 
+    _record_file_count: int = 0
+    _COMMIT_EVERY: int = 100
+
     def record_file(self, run_id: int, file_meta: dict, backup_path: str) -> None:
         with self._lock:
             self._conn.execute(
@@ -222,6 +257,9 @@ class ManifestDB:
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
+            self._record_file_count += 1
+            if self._record_file_count % self._COMMIT_EVERY == 0:
+                self._conn.commit()
 
     # ── File hash cache (incremental detection) ───────────────────────────────
 

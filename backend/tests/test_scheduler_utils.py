@@ -79,3 +79,93 @@ def test_hours_ago_with_aware_stored_timestamp():
     now_utc   = datetime.now(timezone.utc)
     hours_ago = (now_utc - last_dt).total_seconds() / 3600
     assert hours_ago > 0
+
+
+# ── BackupScheduler lifecycle ──────────────────────────────────────────────────
+
+import asyncio
+from unittest.mock import MagicMock, AsyncMock, patch
+from scheduler import BackupScheduler
+
+
+def _make_config():
+    cfg = MagicMock()
+    cfg.schedule_time        = "08:00"
+    cfg.timezone             = "UTC"
+    cfg.retry_count          = 2
+    cfg.retry_delay_minutes  = 0
+    cfg.max_job_minutes      = 240
+    return cfg
+
+
+class TestBackupSchedulerLifecycle:
+    def test_is_running_false_before_start(self):
+        s = BackupScheduler(_make_config(), AsyncMock())
+        assert s.is_running() is False
+
+    def test_is_running_true_after_start(self):
+        s = BackupScheduler(_make_config(), AsyncMock())
+        with patch.object(s._sched, "start"), patch.object(s._sched, "add_job"):
+            s.start()
+            assert s.is_running() is True
+            s._sched.shutdown = MagicMock()
+            s.stop()
+
+    def test_set_current_run_id(self):
+        s = BackupScheduler(_make_config(), AsyncMock())
+        s.set_current_run_id(42)
+        assert s._current_run_id == 42
+
+    def test_reset_missed_alert_clears_flag(self):
+        s = BackupScheduler(_make_config(), AsyncMock())
+        s._missed_alerted = True
+        s.reset_missed_alert()
+        assert s._missed_alerted is False
+
+    def test_reschedule_calls_job_reschedule(self):
+        s    = BackupScheduler(_make_config(), AsyncMock())
+        job  = MagicMock()
+        with patch.object(s._sched, "get_job", return_value=job):
+            s.reschedule("09:30", "Europe/London")
+            job.reschedule.assert_called_once()
+
+    def test_reschedule_schedules_daily_if_no_job(self):
+        s = BackupScheduler(_make_config(), AsyncMock())
+        with patch.object(s._sched, "get_job", return_value=None), \
+             patch.object(s._sched, "add_job") as mock_add:
+            s.reschedule("09:30", "UTC")
+            mock_add.assert_called()
+
+
+class TestBackupSchedulerRetry:
+    def test_run_with_retry_succeeds_on_first_attempt(self):
+        job_fn = AsyncMock()
+        s      = BackupScheduler(_make_config(), job_fn)
+        asyncio.run(s._run_with_retry())
+        assert job_fn.call_count == 1
+
+    def test_run_with_retry_retries_on_failure(self):
+        job_fn = AsyncMock(side_effect=[RuntimeError("fail"), None])
+        cfg    = _make_config()
+        cfg.retry_count = 1
+        s = BackupScheduler(cfg, job_fn)
+        asyncio.run(s._run_with_retry())
+        assert job_fn.call_count == 2
+
+    def test_run_with_retry_exhausts_all_attempts(self):
+        job_fn = AsyncMock(side_effect=RuntimeError("always fails"))
+        cfg    = _make_config()
+        cfg.retry_count = 2
+        reporter = MagicMock()
+        reporter.send_retry_alert = AsyncMock()
+        s = BackupScheduler(cfg, job_fn, reporter=reporter)
+        asyncio.run(s._run_with_retry())
+        assert job_fn.call_count == 3
+        assert reporter.send_retry_alert.call_count == 3
+
+    def test_run_with_retry_resets_retry_count_on_success(self):
+        job_fn = AsyncMock()
+        s      = BackupScheduler(_make_config(), job_fn)
+        s._retry_count = 5
+        asyncio.run(s._run_with_retry())
+        assert s._retry_count == 0

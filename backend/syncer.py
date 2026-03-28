@@ -44,9 +44,10 @@ class _CryptoHelper:
     detected automatically and decrypted transparently.
     """
 
-    def __init__(self, key: Optional[bytes]):
+    def __init__(self, key: Optional[bytes], salt: bytes = b"ghostbackup-stream-v1"):
         self._fernet = None
         self._aesgcm = None
+        self._salt   = salt
         if key:
             try:
                 import base64
@@ -63,7 +64,7 @@ class _CryptoHelper:
                 derived = HKDF(
                     algorithm=hashes.SHA256(),
                     length=32,
-                    salt=b"ghostbackup-stream-v1",
+                    salt=self._salt,
                     info=b"aesgcm-encrypt",
                 ).derive(raw_key)
                 self._aesgcm = AESGCM(derived)
@@ -269,7 +270,8 @@ class LocalSyncer:
     def __init__(self, config: ConfigManager, manifest: ManifestDB):
         self._config   = config
         self._manifest = manifest
-        self._crypto   = _CryptoHelper(config.encryption_key)
+        self._crypto   = _CryptoHelper(config.encryption_key, salt=config.hkdf_salt)
+        self._cleanup_orphan_tmp_files()
         if config.encryption_config_enabled and not self._crypto.enabled:
             logger.warning(
                 "Encryption is enabled in config but GHOSTBACKUP_ENCRYPTION_KEY is not set. "
@@ -280,6 +282,21 @@ class LocalSyncer:
     def encryption_active(self) -> bool:
         """True when encryption is initialised and ready."""
         return self._crypto.enabled
+
+    def _cleanup_orphan_tmp_files(self) -> None:
+        """Remove any .ghosttmp files left behind by a previous interrupted run."""
+        ssd_path = self._config.ssd_path
+        if not ssd_path or not Path(ssd_path).exists():
+            return
+        count = 0
+        for tmp in Path(ssd_path).rglob("*.ghosttmp"):
+            try:
+                tmp.unlink()
+                count += 1
+            except OSError:
+                pass
+        if count:
+            logger.info(f"Cleaned up {count} orphaned .ghosttmp file(s) from SSD")
 
     # ── Pre-flight ────────────────────────────────────────────────────────────
 

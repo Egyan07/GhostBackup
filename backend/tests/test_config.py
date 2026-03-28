@@ -178,7 +178,24 @@ def test_update_skips_unchanged_values(cfg):
 
 
 def test_update_unknown_key_is_ignored(cfg):
-    cfg.update({"nonexistent_key": "value"})  # should not raise
+    ignored = cfg.update({"nonexistent_key": "value"})
+    assert "nonexistent_key" in ignored
+
+
+def test_update_known_key_not_in_ignored(cfg):
+    ignored = cfg.update({"ssd_path": "/tmp/test"})
+    assert "ssd_path" not in ignored
+
+
+def test_hkdf_salt_returns_default_when_env_not_set(cfg):
+    import os
+    os.environ.pop("GHOSTBACKUP_HKDF_SALT", None)
+    assert cfg.hkdf_salt == b"ghostbackup-stream-v1"
+
+
+def test_hkdf_salt_reads_from_env(cfg, monkeypatch):
+    monkeypatch.setenv("GHOSTBACKUP_HKDF_SALT", "my-custom-salt")
+    assert cfg.hkdf_salt == b"my-custom-salt"
 
 
 def test_update_circuit_breaker_threshold(cfg):

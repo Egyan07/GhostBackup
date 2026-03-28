@@ -314,3 +314,23 @@ def test_fmt_bytes(b, expected_unit):
 ])
 def test_fmt_duration(seconds, expected):
     assert _fmt_duration(seconds) == expected
+
+
+# ── Schema migration ──────────────────────────────────────────────────────────
+
+def test_schema_version_is_set_on_fresh_db(tmp_path):
+    db = ManifestDB(tmp_path / "test.db")
+    row = db._conn.execute("SELECT version FROM schema_version").fetchone()
+    assert row is not None
+    assert row[0] == ManifestDB._SCHEMA_VERSION
+
+
+def test_schema_migration_idempotent(tmp_path):
+    """Creating ManifestDB twice on the same file must not raise."""
+    ManifestDB(tmp_path / "test.db")
+    ManifestDB(tmp_path / "test.db")  # should not raise or duplicate version rows
+
+
+def test_db_path_property(tmp_path):
+    db = ManifestDB(tmp_path / "test.db")
+    assert db.db_path == tmp_path / "test.db"

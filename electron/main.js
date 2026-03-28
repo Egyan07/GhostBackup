@@ -504,6 +504,7 @@ function registerIpcHandlers() {
     const ALLOWED_KEYS = [
       "GHOSTBACKUP_SMTP_PASSWORD",
       "GHOSTBACKUP_ENCRYPTION_KEY",
+      "GHOSTBACKUP_HKDF_SALT",
     ];
     if (!ALLOWED_KEYS.includes(key)) {
       return { success: false, error: "Unknown credential key" };
@@ -531,6 +532,7 @@ function registerIpcHandlers() {
   ipcMain.handle("credentials:status", async () => ({
     smtp_password:  !!process.env.GHOSTBACKUP_SMTP_PASSWORD,
     encryption_key: !!process.env.GHOSTBACKUP_ENCRYPTION_KEY,
+    hkdf_salt:      !!process.env.GHOSTBACKUP_HKDF_SALT,
   }));
 
   ipcMain.handle("shell:open-path", async (_, filePath) => {

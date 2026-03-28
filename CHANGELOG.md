@@ -4,6 +4,30 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v2.6.0 — Security Hardening, Reliability & Architecture Completion
+
+### Security
+- **Per-installation HKDF salt** (`config.py`, `syncer.py`): `GHOSTBACKUP_HKDF_SALT` env var replaces the hardcoded static salt used to derive the AES-256-GCM key from the Fernet key material. Falls back to the static default for backward compatibility with existing encrypted backups. Existing installs are unaffected; new installs should set this on first launch.
+- `electron/main.js`: `GHOSTBACKUP_HKDF_SALT` added to `ALLOWED_KEYS` and `credentials:status`
+
+### Reliability
+- **`.ghosttmp` orphan cleanup** (`syncer.py`): `LocalSyncer.__init__` now scans the SSD for leftover `.ghosttmp` files from interrupted runs and removes them at startup
+- **`record_file()` periodic commit** (`manifest.py`): file records are committed to SQLite every 100 inserts — reduces crash data loss window from the entire run to the last 100 files
+
+### Architecture
+- **`run_backup_job` fully injected** (`api.py`): all `_config`, `_manifest`, `_reporter`, `_syncer`, `_scheduler` globals replaced with injected parameters throughout the backup job body. Falls back to module globals when called from the scheduler or watcher (which cannot use `Depends()`)
+- **`PATCH /config` returns `ignored_keys`** (`config.py`, `api.py`): unknown keys in a config update are now surfaced in the response instead of being silently dropped
+- **Real schema migration** (`manifest.py`): `_migrate()` now reads the current `schema_version`, applies numbered delta migrations in order, and commits each step atomically. `_SCHEMA_VERSION = 2` adds `library_summary` column via `ALTER TABLE`
+
+### Frontend
+- **Visibility-aware alert polling** (`AlertBell.jsx`): the 15s alert poll is skipped when `document.visibilityState !== 'visible'` — eliminates background API calls when the window is hidden
+
+### Testing
+- 6 new tests: `update()` `ignored_keys`, `hkdf_salt` default + env override, schema version on fresh DB, migration idempotency, `db_path` property
+- **Total: 319 → 325 backend tests passing**
+
+---
+
 ## v2.5.3 — Public API Completion, Test Expansion & Bug Fix
 
 ### Backend — Encapsulation

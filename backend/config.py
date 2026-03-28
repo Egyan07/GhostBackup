@@ -143,6 +143,18 @@ class ConfigManager:
         raw = os.getenv("GHOSTBACKUP_ENCRYPTION_KEY", "")
         return raw.encode() if raw else None
 
+    @property
+    def hkdf_salt(self) -> bytes:
+        """
+        Per-installation HKDF salt loaded from GHOSTBACKUP_HKDF_SALT environment variable.
+        Falls back to the legacy hardcoded salt for backward compatibility with existing
+        encrypted backups. Set this on new installations for stronger key isolation.
+        """
+        raw = os.getenv("GHOSTBACKUP_HKDF_SALT", "")
+        if raw:
+            return raw.encode()
+        return b"ghostbackup-stream-v1"
+
     # ── SSD ───────────────────────────────────────────────────────────────────
 
     @property
@@ -392,8 +404,10 @@ class ConfigManager:
             "exclude_patterns":          ("backup",      "exclude_patterns"),
             "circuit_breaker_threshold": ("circuit_breaker_threshold",),
         }
+        ignored = []
         for key, val in updates.items():
             if key not in mapping:
+                ignored.append(key)
                 continue
             path = mapping[key]
             if len(path) == 1:
@@ -406,6 +420,7 @@ class ConfigManager:
                 self._manifest_ref.log_config_change(key, old_val, val)
         self._save()
         logger.info(f"Config updated: {list(updates.keys())}")
+        return ignored
 
     def update_smtp(self, smtp: dict) -> None:
         SMTP_KEYS = {"host", "port", "sender", "recipients", "use_tls", "username", "user"}
