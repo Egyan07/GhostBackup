@@ -5,8 +5,8 @@
 ### Automated Backup with Encryption & Audit Logging
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
-![Backend Coverage](https://img.shields.io/badge/coverage-82%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-338%20passing-brightgreen)
+![Backend Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-379%20passing-brightgreen)
 ![GitHub issues](https://img.shields.io/github/issues/Egyan07/GhostBackup)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Egyan07/GhostBackup)
 ![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
@@ -157,7 +157,7 @@ Before adopting GhostBackup, understand what it **does not** do:
 ## 🧪 Testing
 
 ```bash
-# Backend — 278 tests, 82% line coverage
+# Backend — 319 tests, 88% line coverage
 cd backend
 python -m pytest tests/ -v --cov=. --cov-report=term-missing
 

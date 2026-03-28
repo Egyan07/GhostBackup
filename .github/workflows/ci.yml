@@ -45,7 +45,7 @@ jobs:
             --tb=short \
             --cov=backend \
             --cov-report=term-missing \
-            --cov-fail-under=80
+            --cov-fail-under=85
         env:
           GHOSTBACKUP_CONFIG: backend/config/config.yaml.example
           GHOSTBACKUP_API_PORT: "8765"

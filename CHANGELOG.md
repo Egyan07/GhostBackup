@@ -4,6 +4,81 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v2.5.3 — Public API Completion, Test Expansion & Bug Fix
+
+### Backend — Encapsulation
+- **`LocalSyncer.encryption_active` property** — replaces direct `_crypto.enabled` access from `api.py`
+- **`ManifestDB.db_path` property** — replaces direct `_path` access from `api.py`
+
+### Backend — Bug Fix
+- **`generate_health_report` crash fixed** — `_HEALTH_REPORT_TEMPLATE` used `.format()` on a string containing CSS curly braces, raising `KeyError` on every health report generation. Replaced with `.replace()` calls.
+
+### Testing
+- 10 new `BackupScheduler` tests — lifecycle, retry logic, `reset_missed_alert`. Coverage: 28% → 70%
+- 9 new `Reporter` tests — `_send_email`, `send_test_email`, `generate_health_report`. Coverage: 56% → 71%
+- **Total: 300 → 319 backend tests, 85% → 88% overall coverage**
+
+---
+
+## v2.5.2 — Exception Specificity & Test Coverage Expansion
+
+### Backend
+- **Exception specificity in `syncer.py`** — `restore_files` and `verify_backups` broad `except Exception` blocks narrowed to `(PermissionError, OSError, RuntimeError)`
+
+### Testing
+- 8 new `FileWatcher` unit tests — lifecycle: start, stop, reload, idempotency, dispatch safety. `watcher.py` coverage: 56% → 92%
+- 7 new API endpoint tests — watcher start/stop, prune, dashboard, SSD status
+- **Total: 285 → 300 tests, 83% → 85% coverage**
+
+---
+
+## v2.5.1 — Config Schema Validation
+
+### Backend
+- **Input validation on `ConfigManager.update()`** — validates `schedule_time` (HH:MM), `timezone` (IANA), `concurrency` (1–32), `max_file_size_gb` (1–100), `circuit_breaker_threshold` (0.0–1.0), `exclude_patterns` (list of strings). Invalid values raise `ValueError` → HTTP 400.
+- 7 new validation tests in `test_config.py`. **Total: 278 → 285 tests**
+
+---
+
+## v2.5.0 — Complete Dependency Injection
+
+### Backend
+- **Full DI coverage** — all 25 remaining endpoints now declare dependencies via `Depends()` instead of module globals
+- **`/health` version fix** — version string now reads from `app.version` dynamically instead of hardcoded `"2.3.2"`
+- **`_do_prune` fully injected** — config, syncer, and reporter passed through from endpoint into background task
+
+---
+
+## v2.4.3 — Internal API Hardening & Zero Lint Warnings
+
+### Backend
+- **`FileWatcher.is_running` property** — replaces direct `_running` attribute access
+- **`BackupScheduler.reset_missed_alert()`** — public method replaces direct `_missed_alerted` mutation
+- **`manifest.log()` commits immediately** — log entries no longer at risk of loss on crash
+
+### Frontend / Tooling
+- **Zero ESLint warnings** — `no-unused-vars` rule ignores PascalCase (JSX components)
+
+---
+
+## v2.4.2 — Remove Dead Lock, Wire DI into Endpoint Bodies, Log Notify Failures
+
+### Backend
+- **`_active_run_lock` dead code removed** — unified to single `_run_mutex` threading.Lock
+- **DI completed in endpoint bodies** — `restore`, `verify`, `smtp/test` endpoints use injected deps
+- **Silent failure fixed** — `_desktop_notify` errors now logged at DEBUG level
+
+---
+
+## v2.4.1 — Fix get_config Name Collision, Unify Run Lock, Manifest Close Race
+
+### Backend
+- **`get_config` name collision fixed** — dep provider renamed to `provide_config`
+- **Dual-lock unified** — `run_backup_job` uses `_run_mutex` throughout
+- **`manifest.close()` race fixed** — `_conn.close()` moved inside lock
+
+---
+
 ## v2.4.0 — Phase 1 Polish
 
 ### Frontend

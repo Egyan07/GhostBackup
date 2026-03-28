@@ -152,7 +152,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="2.4.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="2.5.3", lifespan=lifespan)
 
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
