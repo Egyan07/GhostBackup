@@ -101,6 +101,7 @@ def client():
         patch("api.get_ssd_status",   return_value={"status": "ok"}),
     ):
         import api as api_module
+        api_module._limiter.reset()
         with TestClient(api_module.app, raise_server_exceptions=True) as c:
             c._api = api_module   # expose for tests that need to set _active_run
             yield c

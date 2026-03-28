@@ -9,6 +9,7 @@
 import { createRoot }          from "react-dom/client";
 import { useState, useEffect } from "react";
 import App from "./GhostBackup.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import "./splash.css";
 import "./styles.css";
 
@@ -75,7 +76,7 @@ function BackendProvider() {
     };
   }, []);
 
-  if (state === "ready") return <App />;
+  if (state === "ready") return <ErrorBoundary><App /></ErrorBoundary>;
 
   return (
     <div className="splash">

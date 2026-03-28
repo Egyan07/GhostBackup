@@ -3,12 +3,6 @@ import api from "../api-client.js";
 import ErrBanner from "../components/ErrBanner.jsx";
 import LoadingState from "../components/LoadingState.jsx";
 
-const OVERLAY = {
-  position: "fixed", inset: 0, zIndex: 1000,
-  background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)",
-  display: "flex", alignItems: "center", justifyContent: "center",
-};
-
 function KeyRotationModal({ newKey, onConfirm, onCancel }) {
   const [copied, setCopied] = useState(false);
 
@@ -20,18 +14,18 @@ function KeyRotationModal({ newKey, onConfirm, onCancel }) {
   };
 
   return (
-    <div style={OVERLAY} role="dialog" aria-modal="true" aria-labelledby="kr-title">
-      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)", borderRadius: "var(--r-lg)", padding: 28, width: "min(480px, 92vw)", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
-        <div id="kr-title" style={{ fontSize: 16, fontWeight: 700, color: "var(--red)", marginBottom: 8 }}>⚠ Confirm Key Rotation</div>
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="kr-title">
+      <div className="modal-box">
+        <div id="kr-title" className="modal-title modal-title-danger">⚠ Confirm Key Rotation</div>
         <p className="text-sm text-secondary" style={{ lineHeight: 1.6, marginBottom: 16 }}>
           A new encryption key has been generated. Before you continue:
         </p>
-        <ul style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.8, paddingLeft: 18, marginBottom: 16 }}>
+        <ul className="modal-list">
           <li>All <strong>future</strong> backups will be encrypted with the new key.</li>
           <li><strong>Existing</strong> backups on the SSD remain encrypted with the old key — keep the old key if you ever need to restore them.</li>
-          <li>You <strong>must</strong> update <code style={{ fontFamily: "var(--font-mono)", fontSize: 12, background: "var(--bg-raised)", padding: "1px 5px", borderRadius: 3 }}>.env.local</code> with the new key before restarting GhostBackup.</li>
+          <li>You <strong>must</strong> update <code className="inline-code">.env.local</code> with the new key before restarting GhostBackup.</li>
         </ul>
-        <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border-subtle)", borderRadius: "var(--r-md)", padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all", marginBottom: 16, color: "var(--text-primary)" }}>
+        <div className="key-display">
           {newKey}
         </div>
         <div className="flex gap-8 mb-16">
@@ -76,7 +70,7 @@ export default function Settings() {
   if (loading) return <LoadingState />;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="flex flex-col gap-16">
       <ErrBanner error={error} onDismiss={() => setError(null)} />
 
       {/* SSD Health */}
@@ -105,9 +99,9 @@ export default function Settings() {
                 { label: "Free",        value: `${ssdStatus.available_gb?.toFixed(1)} GB`,
                   color: ssdStatus.available_gb < 10 ? "var(--red)" : "var(--green)" },
               ].map(s => (
-                <div key={s.label} style={{ padding: "10px 12px", background: "var(--bg-raised)", borderRadius: "var(--r-md)", border: "1px solid var(--border-subtle)" }}>
+                <div key={s.label} className="stat-card">
                   <div className="text-xs text-tertiary mb-4">{s.label}</div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: s.color || "var(--text-primary)", fontFamily: s.mono ? "var(--font-mono)" : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.value}</div>
+                  <div className={`stat-card-value${s.mono ? " mono" : ""}`} style={{ color: s.color || undefined }}>{s.value}</div>
                 </div>
               ))}
             </div>
@@ -216,7 +210,7 @@ export default function Settings() {
             onClick={async () => { setTestMsg(null); try { await api.testSmtp(); setTestMsg("✓ Test email sent successfully"); } catch (e) { setTestMsg(`✕ ${e.message}`); } }}>
             Send Test Email
           </button>
-          {testMsg && <span style={{ fontSize: 12, color: testMsg.startsWith("✓") ? "var(--green)" : "var(--red)" }}>{testMsg}</span>}
+          {testMsg && <span className={`text-sm ${testMsg.startsWith("✓") ? "text-green" : "text-red"}`}>{testMsg}</span>}
         </div>
       </div>
 

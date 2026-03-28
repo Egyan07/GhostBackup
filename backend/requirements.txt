@@ -21,6 +21,9 @@ cryptography==44.0.2  # pinned: msal requires <45; CVE-2026-26007 + CVE-2026-340
 # File watching (real-time sync)
 watchdog==4.0.1
 
+# Rate limiting
+slowapi==0.1.9
+
 # Utilities
 python-multipart==0.0.22
 

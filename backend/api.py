@@ -23,9 +23,13 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from config import ConfigManager
 from manifest import ManifestDB
@@ -51,6 +55,35 @@ _watcher:    Optional[FileWatcher]     = None
 _active_run:      Optional[dict]            = None
 _active_run_lock: Optional[asyncio.Lock]    = None
 _run_mutex:       threading.Lock            = threading.Lock()  # protects _active_run mutations from thread pool
+
+# ── Rate limiter ──────────────────────────────────────────────────────────────
+_limiter = Limiter(key_func=get_remote_address)
+
+
+# ── Dependency providers ──────────────────────────────────────────────────────
+
+def get_config() -> ConfigManager:
+    return _config
+
+
+def get_manifest() -> ManifestDB:
+    return _manifest
+
+
+def get_scheduler() -> BackupScheduler:
+    return _scheduler
+
+
+def get_reporter() -> Reporter:
+    return _reporter
+
+
+def get_syncer() -> LocalSyncer:
+    return _syncer
+
+
+def get_watcher() -> FileWatcher:
+    return _watcher
 
 
 async def _desktop_notify(title: str, body: str) -> None:
@@ -121,7 +154,14 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="2.3.2", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="2.4.0", lifespan=lifespan)
+
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
+    content='{"detail":"Rate limit exceeded — slow down"}',
+    status_code=429, media_type="application/json",
+))
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -574,7 +614,9 @@ async def dashboard():
 
 
 @app.post("/run/start")
-async def start_run(req: RunRequest, background_tasks: BackgroundTasks):
+@_limiter.limit("10/minute")
+async def start_run(request: Request, req: RunRequest, background_tasks: BackgroundTasks,
+                    cfg: ConfigManager = Depends(get_config)):
     with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
             raise HTTPException(409, "A backup run is already in progress")
@@ -691,7 +733,9 @@ async def get_config_audit(limit: int = Query(default=100, ge=1, le=1000)):
 
 
 @app.post("/restore")
-async def restore(req: RestoreRequest, background_tasks: BackgroundTasks):
+@_limiter.limit("5/minute")
+async def restore(request: Request, req: RestoreRequest, background_tasks: BackgroundTasks,
+                  manifest: ManifestDB = Depends(get_manifest), syncer: LocalSyncer = Depends(get_syncer)):
     run = _manifest.get_run(req.run_id)
     if not run:
         raise HTTPException(404, f"Run #{req.run_id} not found")
@@ -741,8 +785,10 @@ async def restore(req: RestoreRequest, background_tasks: BackgroundTasks):
 
 
 @app.post("/verify")
-async def verify_backups(background_tasks: BackgroundTasks,
-                         source_label: Optional[str] = None):
+@_limiter.limit("5/minute")
+async def verify_backups(request: Request, background_tasks: BackgroundTasks,
+                         source_label: Optional[str] = None,
+                         syncer: LocalSyncer = Depends(get_syncer)):
     """
     Re-reads backed-up files and verifies hashes against the manifest.
     Run manually or schedule weekly to catch SSD corruption early.
@@ -786,7 +832,8 @@ async def update_smtp(req: SmtpUpdateRequest):
 
 
 @app.post("/settings/smtp/test")
-async def test_smtp():
+@_limiter.limit("3/minute")
+async def test_smtp(request: Request, reporter: Reporter = Depends(get_reporter)):
     try:
         await _reporter.send_test_email()
         return {"message": "Test email sent successfully"}
@@ -829,7 +876,8 @@ async def _do_prune():
 
 
 @app.post("/settings/encryption/generate-key")
-async def generate_encryption_key():
+@_limiter.limit("5/minute")
+async def generate_encryption_key(request: Request, cfg: ConfigManager = Depends(get_config)):
     """
     Generate a new Fernet encryption key and return it to the UI.
     The key is NOT stored anywhere by the backend — the user must

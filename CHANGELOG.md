@@ -4,6 +4,18 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v2.4.0 — Phase 1 Polish
+
+### Frontend
+- **React Error Boundary** (`src/components/ErrorBoundary.jsx`, `src/main.jsx`): class component catches uncaught render errors and shows a recoverable "Something went wrong" screen instead of a blank white page.
+- **CSS class extraction** (`src/styles.css`): modal overlay/box/title, key-display, stat-card, and ssd-status-card styles extracted into named classes.
+
+### Backend
+- **Rate limiting** (`backend/api.py`, `backend/requirements.txt`): slowapi rate limits on 5 sensitive endpoints — `/run/start` (10/min), `/restore` (5/min), `/verify` (5/min), `/settings/smtp/test` (3/min), `/settings/encryption/generate-key` (5/min).
+- **FastAPI dependency providers** (`backend/api.py`): `get_config()`, `get_manifest()`, `get_scheduler()`, `get_reporter()`, `get_syncer()`, `get_watcher()` wired into rate-limited endpoints via `Depends()`.
+
+---
+
 ## v2.3.2 — Code Review & Reliability Hardening
 
 ### Backend
