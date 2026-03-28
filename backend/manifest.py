@@ -334,6 +334,7 @@ class ManifestDB:
                 "INSERT INTO logs (run_id, logged_at, level, message) VALUES (?,?,?,?)",
                 (run_id, datetime.now(timezone.utc).isoformat(), level.upper(), message),
             )
+            self._conn.commit()
 
     def get_logs(self, run_id: int, level: Optional[str] = None,
                  limit: int = 500) -> list[dict]:

@@ -196,6 +196,10 @@ class FileWatcher:
         except RuntimeError as e:
             logger.error(f"[{label}] Watcher dispatch failed: {e}")
 
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
     def status(self) -> dict:
         return {
             "running":          self._running,

@@ -72,6 +72,7 @@ def _make_scheduler():
 def _make_watcher():
     w = MagicMock()
     w._running = False
+    w.is_running = False
     w.status.return_value = {"running": False, "sources": []}
     return w
 
@@ -402,6 +403,7 @@ class TestWatcher:
     def test_watcher_stop_when_not_running(self, client):
         import api as api_module
         api_module._watcher._running = False
+        api_module._watcher.is_running = False
         r = client.post("/watcher/stop")
         assert r.status_code == 200
 
@@ -409,6 +411,7 @@ class TestWatcher:
         import api as api_module
         api_module._config.get_enabled_sources.return_value = []
         api_module._watcher._running = False
+        api_module._watcher.is_running = False
         assert client.post("/watcher/start").status_code == 400
 
 

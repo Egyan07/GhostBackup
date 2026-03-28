@@ -143,7 +143,7 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("GhostBackup API shutting down…")
-    if _watcher and _watcher._running:
+    if _watcher and _watcher.is_running:
         _watcher.stop()
     if _scheduler:
         _scheduler.stop()
@@ -482,7 +482,7 @@ async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
         logger.info(f"Run #{run_id} complete — {final_status}")
 
         if final_status == "success" and _scheduler:
-            _scheduler._missed_alerted = False
+            _scheduler.reset_missed_alert()
 
     except Exception as fatal_err:
         logger.error(f"Fatal backup error: {fatal_err}", exc_info=True)
@@ -676,9 +676,9 @@ async def update_config(req: ConfigUpdateRequest):
         _scheduler.reschedule(_config.schedule_time, _config.timezone)
     global _syncer
     _syncer = LocalSyncer(_config, _manifest)
-    if watcher_enabled is True and _watcher and not _watcher._running:
+    if watcher_enabled is True and _watcher and not _watcher.is_running:
         _watcher.reload_sources()
-    elif watcher_enabled is False and _watcher and _watcher._running:
+    elif watcher_enabled is False and _watcher and _watcher.is_running:
         _watcher.stop()
     return {"message": "Config updated", "config": _config.to_dict_safe()}
 
@@ -699,7 +699,7 @@ async def reset_config():
     _config.reset_to_defaults()
     if _scheduler:
         _scheduler.reschedule(_config.schedule_time, _config.timezone)
-    if _watcher and _watcher._running:
+    if _watcher and _watcher.is_running:
         _watcher.stop()
     return {"message": "Configuration reset to defaults", "config": _config.to_dict_safe()}
 
@@ -899,7 +899,7 @@ async def watcher_status():
 async def watcher_start():
     if not _watcher:
         raise HTTPException(503, "Watcher not initialised")
-    if _watcher._running:
+    if _watcher.is_running:
         return {"message": "Watcher already running", **_watcher.status()}
     if not _config.get_enabled_sources():
         raise HTTPException(
@@ -913,7 +913,7 @@ async def watcher_start():
 async def watcher_stop():
     if not _watcher:
         raise HTTPException(503, "Watcher not initialised")
-    if not _watcher._running:
+    if not _watcher.is_running:
         return {"message": "Watcher is not running"}
     _watcher.stop()
     return {"message": "Watcher stopped"}

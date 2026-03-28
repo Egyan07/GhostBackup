@@ -30,7 +30,7 @@ module.exports = [
       },
     },
     rules: {
-      "no-unused-vars": "warn",
+      "no-unused-vars": ["warn", { "varsIgnorePattern": "^[A-Z]" }],
       "no-console": "off",
     },
   },

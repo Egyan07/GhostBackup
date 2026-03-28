@@ -53,6 +53,10 @@ class BackupScheduler:
         """Inject ManifestDB so the missed-backup check can query run history."""
         self._manifest_ref = manifest
 
+    def reset_missed_alert(self) -> None:
+        """Clear the missed-backup alert flag after a successful run."""
+        self._missed_alerted = False
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def start(self) -> None:
