@@ -425,7 +425,7 @@ class ManifestDB:
     def close(self) -> None:
         with self._lock:
             self._conn.commit()
-        self._conn.close()
+            self._conn.close()
         logger.info("ManifestDB closed")
 
 

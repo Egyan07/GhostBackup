@@ -62,7 +62,7 @@ _limiter = Limiter(key_func=get_remote_address)
 
 # ── Dependency providers ──────────────────────────────────────────────────────
 
-def get_config() -> ConfigManager:
+def provide_config() -> ConfigManager:
     return _config
 
 
@@ -276,7 +276,7 @@ def _new_run_state(run_id: int, full: bool) -> dict:
 async def run_backup_job(full: bool = False, sources: list[str] = None) -> None:
     global _active_run
 
-    async with _active_run_lock:
+    with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
             logger.warning("Backup already running — skipping duplicate trigger")
             return
@@ -616,7 +616,7 @@ async def dashboard():
 @app.post("/run/start")
 @_limiter.limit("10/minute")
 async def start_run(request: Request, req: RunRequest, background_tasks: BackgroundTasks,
-                    cfg: ConfigManager = Depends(get_config)):
+                    cfg: ConfigManager = Depends(provide_config)):
     with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
             raise HTTPException(409, "A backup run is already in progress")
@@ -877,7 +877,7 @@ async def _do_prune():
 
 @app.post("/settings/encryption/generate-key")
 @_limiter.limit("5/minute")
-async def generate_encryption_key(request: Request, cfg: ConfigManager = Depends(get_config)):
+async def generate_encryption_key(request: Request, cfg: ConfigManager = Depends(provide_config)):
     """
     Generate a new Fernet encryption key and return it to the UI.
     The key is NOT stored anywhere by the backend — the user must
