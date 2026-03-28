@@ -58,6 +58,7 @@ def _make_syncer():
     s = MagicMock()
     s._crypto = MagicMock()
     s._crypto.enabled = True
+    s.encryption_active = True
     s.check_ssd.return_value = {"status": "ok"}
     return s
 

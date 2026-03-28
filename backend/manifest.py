@@ -45,6 +45,11 @@ class ManifestDB:
         self._migrate()
         logger.info(f"ManifestDB ready: {db_path}")
 
+    @property
+    def db_path(self) -> Path:
+        """Path to the SQLite database file."""
+        return self._path
+
     # ── Schema ────────────────────────────────────────────────────────────────
 
     def _migrate(self) -> None:

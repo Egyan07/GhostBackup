@@ -501,7 +501,9 @@ class Reporter:
             for r in runs
         )
         ts   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        html = _HEALTH_REPORT_TEMPLATE.format(rows=rows, generated=ts)
+        html = (_HEALTH_REPORT_TEMPLATE
+                .replace("{generated}", ts)
+                .replace("{rows}", rows))
         path = REPORT_DIR / f"health_{datetime.now(timezone.utc).strftime('%Y%m%d')}.html"
         path.write_text(html, encoding="utf-8")
         return path

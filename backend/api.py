@@ -132,7 +132,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"FileWatcher failed to start: {e}")
 
-    if _syncer._crypto.enabled:
+    if _syncer.encryption_active:
         logger.info("Backup encryption: ACTIVE")
     else:
         logger.warning(
@@ -563,7 +563,7 @@ async def _backup_manifest_to_ssd() -> None:
     try:
         db_dest = Path(_config.ssd_path) / ".ghostbackup" / "ghostbackup.db"
         db_dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(_manifest._path), str(db_dest))
+        shutil.copy2(str(_manifest.db_path), str(db_dest))
         logger.info(f"Manifest DB backed up to SSD: {db_dest}")
     except Exception as db_err:
         logger.warning(f"Manifest DB backup to SSD failed: {db_err}")
@@ -585,7 +585,7 @@ async def health(cfg: ConfigManager = Depends(provide_config),
             "timezone": cfg.timezone,
             "label": f"Daily at {cfg.schedule_time} {cfg.timezone}",
         },
-        "encryption_active": syncer._crypto.enabled if syncer else False,
+        "encryption_active": syncer.encryption_active if syncer else False,
     }
 
 

@@ -276,6 +276,11 @@ class LocalSyncer:
                 "Backups will be stored UNENCRYPTED. Run SETUP.md step 3 to configure the key."
             )
 
+    @property
+    def encryption_active(self) -> bool:
+        """True when encryption is initialised and ready."""
+        return self._crypto.enabled
+
     # ── Pre-flight ────────────────────────────────────────────────────────────
 
     def check_ssd(self) -> dict:

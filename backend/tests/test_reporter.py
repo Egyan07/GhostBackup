@@ -208,3 +208,99 @@ class TestReporter:
         ))
         assert calls_a == []
         assert calls_b == ["Title"]
+
+
+# ── Reporter._send_email ──────────────────────────────────────────────────────
+
+class TestSendEmail:
+    def _make_config(self, recipients=None, user="test@example.com", password="secret"):
+        cfg = MagicMock()
+        cfg.smtp_host        = "smtp.example.com"
+        cfg.smtp_port        = 587
+        cfg.smtp_use_tls     = True
+        cfg.smtp_user        = user
+        cfg.smtp_password    = password
+        cfg.smtp_recipients  = recipients or ["dest@example.com"]
+        return cfg
+
+    def test_send_email_skipped_when_no_recipients(self):
+        cfg = self._make_config(recipients=[], user="")
+        r   = Reporter(cfg)
+        with patch("smtplib.SMTP") as mock_smtp:
+            r._send_email("Subject", "<html/>", "plain")
+            mock_smtp.assert_not_called()
+
+    def test_send_email_skipped_when_no_user(self):
+        cfg = self._make_config(user="")
+        r   = Reporter(cfg)
+        with patch("smtplib.SMTP") as mock_smtp:
+            r._send_email("Subject", "<html/>", "plain")
+            mock_smtp.assert_not_called()
+
+    def test_send_email_calls_smtp(self):
+        cfg = self._make_config()
+        r   = Reporter(cfg)
+        with patch("smtplib.SMTP") as mock_smtp:
+            ctx = mock_smtp.return_value.__enter__.return_value
+            r._send_email("Subject", "<html/>", "plain")
+            assert ctx.sendmail.called
+
+    def test_send_email_uses_starttls(self):
+        cfg = self._make_config()
+        r   = Reporter(cfg)
+        with patch("smtplib.SMTP") as mock_smtp:
+            ctx = mock_smtp.return_value.__enter__.return_value
+            r._send_email("Subject", "<html/>", "plain")
+            assert ctx.starttls.called
+
+    def test_send_email_logs_in_when_password_set(self):
+        cfg = self._make_config()
+        r   = Reporter(cfg)
+        with patch("smtplib.SMTP") as mock_smtp:
+            ctx = mock_smtp.return_value.__enter__.return_value
+            r._send_email("Subject", "<html/>", "plain")
+            assert ctx.login.called
+
+    def test_send_email_skips_login_when_no_password(self):
+        cfg = self._make_config(password="")
+        r   = Reporter(cfg)
+        with patch("smtplib.SMTP") as mock_smtp:
+            ctx = mock_smtp.return_value.__enter__.return_value
+            r._send_email("Subject", "<html/>", "plain")
+            ctx.login.assert_not_called()
+
+    def test_send_test_email_calls_send_email(self):
+        cfg = self._make_config()
+        r   = Reporter(cfg)
+        with patch.object(r, "_send_email") as mock_send:
+            asyncio.run(r.send_test_email())
+            assert mock_send.called
+            assert "SMTP" in mock_send.call_args[0][0] or "Test" in mock_send.call_args[0][0]
+
+
+# ── Reporter.generate_health_report ───────────────────────────────────────────
+
+class TestHealthReport:
+    def test_health_report_returns_path(self, tmp_path):
+        cfg = MagicMock()
+        r   = Reporter.__new__(Reporter)
+        r._config = cfg
+        r.alerts  = AlertManager()
+        r._notify_cb = None
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        with patch("reporter.REPORT_DIR", tmp_path):
+            path = r.generate_health_report([])
+            assert path.exists()
+
+    def test_health_report_contains_html(self, tmp_path):
+        cfg = MagicMock()
+        r   = Reporter.__new__(Reporter)
+        r._config = cfg
+        r.alerts  = AlertManager()
+        r._notify_cb = None
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        with patch("reporter.REPORT_DIR", tmp_path):
+            path = r.generate_health_report([{"id": 1, "status": "success", "started_at": "2026-01-01", "files_transferred": 5, "bytes_human": "10 MB", "duration_human": "1m", "files_failed": 0}])
+            content = path.read_text()
+            assert "GhostBackup" in content
+            assert "SUCCESS" in content
