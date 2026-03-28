@@ -167,7 +167,7 @@ npm test
 
 | Suite | Tests | Coverage | Type | CI |
 |-------|-------|----------|------|----|
-| Backend | 278 | 82% line | Unit + integration | ✅ GitHub Actions |
+| Backend | 319 | 88% line | Unit + integration | ✅ GitHub Actions |
 | Frontend | 60 | — | Unit (Vitest) | ✅ GitHub Actions |
 
 **What's tested:**
