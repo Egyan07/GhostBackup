@@ -72,15 +72,16 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 
 | Feature | Description |
 |---------|-------------|
-| 🔐 Encryption at Rest | AES-256-GCM streaming encryption via Python `cryptography` library. Constant memory usage regardless of file size. Per-file random nonce. Versioned encryption header for future key rotation. |
-| 🔒 API Security | Auto-generated session token per launch via `crypto.randomBytes(32)`. All endpoints authenticated via `X-API-Key` header with timing-safe comparison (`hmac.compare_digest`). |
+| 🔐 Encryption at Rest | AES-256-GCM streaming encryption via Python `cryptography` library. Constant memory usage regardless of file size. Per-file random nonce. Versioned encryption header for future key rotation. Per-installation HKDF salt for stronger key isolation. |
+| 🔒 API Security | Auto-generated session token per launch via `crypto.randomBytes(32)`. All endpoints authenticated via `X-API-Key` header with timing-safe comparison (`hmac.compare_digest`). Rate limiting on sensitive endpoints (slowapi). |
 | 💾 Dual-SSD Redundancy | Primary and secondary SSD support. Combined with the original source, this gives you 3 copies across 2 drives. Offsite copy is your responsibility — GhostBackup handles the local copies. |
 | ⏰ Scheduled Backups | Daily automated backups via APScheduler with configurable time and timezone. |
-| 👁️ Real-Time File Watching | Watchdog-based file system monitor. Detects changes and triggers incremental backup (15s debounce, 120s cooldown between triggers). |
+| 👁️ Real-Time File Watching | Watchdog-based file system monitor. Detects changes and triggers incremental backup (15s debounce, 120s cooldown between triggers). Orphaned temp files from interrupted runs are cleaned up on startup. |
 | 🛑 Failure Threshold Abort | If more than 5% of files fail during a library run (minimum 3 failures), that library is aborted. Other libraries continue. Threshold is configurable. |
 | ✅ Integrity Verification | `/verify` endpoint re-hashes every backed-up file using xxhash and compares against stored checksums. |
-| 📚 Audit Trail | Every configuration change is logged with UTC timestamp and hostname. Full backup history with per-file status stored in SQLite. |
+| 📚 Audit Trail | Every configuration change is logged with UTC timestamp and hostname. Full backup history with per-file status stored in SQLite. Config updates surface unknown/ignored keys in the API response. |
 | 📧 Email Alerts | SMTP-based failure alerts and run summaries. Supports Gmail App Passwords and standard SMTP providers. |
+| 🔢 Config Validation | All writable config fields validated on update — schedule time (HH:MM), IANA timezone, numeric ranges, type checks. Invalid values return HTTP 400 before any write. |
 
 ---
 
@@ -134,7 +135,7 @@ Before adopting GhostBackup, understand what it **does not** do:
    - Install Python and Node.js dependencies
    - Prompt you to select backup source folders
    - Prompt you to select primary (and optionally secondary) SSD drive
-   - Generate an AES-256 encryption key and store it in `.env.local`
+   - Generate an AES-256 encryption key and per-installation HKDF salt, stored in `.env.local`
    - Create `backend/config/config.yaml` from the template
 
 3. Launch GhostBackup:
@@ -397,12 +398,12 @@ GhostBackup/
 
 | Layer | Implementation |
 |-------|----------------|
-| Encryption | AES-256-GCM via Python `cryptography` library. Streaming with constant memory. Per-file random nonce (`os.urandom`). Versioned header (v1) for key rotation support. |
-| API Authentication | Session token via `crypto.randomBytes(32)` per launch. Validated with `hmac.compare_digest` (timing-safe). |
+| Encryption | AES-256-GCM via Python `cryptography` library. Streaming with constant memory. Per-file random nonce (`os.urandom`). Versioned header (v1) for key rotation support. Per-installation HKDF salt generated at setup for stronger key derivation isolation. |
+| API Authentication | Session token via `crypto.randomBytes(32)` per launch. Validated with `hmac.compare_digest` (timing-safe). Rate limiting on sensitive endpoints (slowapi). |
 | Path Safety | Restore endpoint validates all paths against traversal attacks before any file operation. |
 | Electron Sandbox | Chromium sandbox enabled. CSP enforced in both dev and production builds. |
 | Credential Storage | Secrets in `.env.local` with input sanitization on writes. Excluded from version control. |
-| Database Integrity | SQLite with `PRAGMA synchronous=FULL` and batched commits to prevent corruption on unexpected shutdown. |
+| Database Integrity | SQLite with `PRAGMA synchronous=FULL`. File records committed every 100 inserts during a run — crash data loss limited to at most 100 files. Schema versioned with incremental delta migrations. |
 | Process Safety | Before killing a conflicting process on port 8765, GhostBackup verifies it's a Python/GhostBackup process. Will not kill unrelated processes. |
 | Data Integrity | xxhash checksum computed at source, verified after every copy to primary and secondary drives. |
 | Failure Protection | Configurable failure threshold (default 5%, min 3 files). If exceeded per library, that library aborts. |
