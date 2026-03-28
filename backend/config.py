@@ -8,9 +8,11 @@ are read exclusively from environment variables and never persisted to disk.
 
 import logging
 import os
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Optional
+from zoneinfo import available_timezones
 
 import yaml
 from pydantic import BaseModel, Field
@@ -344,11 +346,38 @@ class ConfigManager:
         self._save()
         logger.info("Configuration reset to factory defaults")
 
+    def _validate_update(self, updates: dict) -> None:
+        """Raise ValueError if any value in a flat update dict is out of range or invalid."""
+        if "schedule_time" in updates:
+            if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(updates["schedule_time"])):
+                raise ValueError("schedule_time must be HH:MM (00:00–23:59)")
+        if "timezone" in updates:
+            if updates["timezone"] not in available_timezones():
+                raise ValueError(f"Unknown timezone: {updates['timezone']}")
+        if "concurrency" in updates:
+            v = updates["concurrency"]
+            if not isinstance(v, int) or not (1 <= v <= 32):
+                raise ValueError("concurrency must be an integer between 1 and 32")
+        if "max_file_size_gb" in updates:
+            v = updates["max_file_size_gb"]
+            if not isinstance(v, int) or not (1 <= v <= 100):
+                raise ValueError("max_file_size_gb must be an integer between 1 and 100")
+        if "circuit_breaker_threshold" in updates:
+            v = updates["circuit_breaker_threshold"]
+            if not isinstance(v, (int, float)) or not (0.0 <= v <= 1.0):
+                raise ValueError("circuit_breaker_threshold must be a float between 0.0 and 1.0")
+        if "exclude_patterns" in updates:
+            if not isinstance(updates["exclude_patterns"], list) or not all(
+                isinstance(p, str) for p in updates["exclude_patterns"]
+            ):
+                raise ValueError("exclude_patterns must be a list of strings")
+
     def update(self, updates: dict) -> None:
         """
         Apply a flat update dict and log each changed field to the audit trail.
         Unknown keys are silently ignored.
         """
+        self._validate_update(updates)
         mapping = {
             "ssd_path":                  ("ssd_path",),
             "secondary_ssd_path":        ("secondary_ssd_path",),

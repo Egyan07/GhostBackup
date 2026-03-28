@@ -217,6 +217,58 @@ def test_update_retention_logs_to_audit(cfg):
     manifest.log_config_change.assert_called_once()
 
 
+# ── _validate_update ─────────────────────────────────────────────────────────
+
+def test_validate_update_rejects_bad_schedule_time(cfg):
+    with pytest.raises(ValueError, match="schedule_time"):
+        cfg.update({"schedule_time": "25:00"})
+
+
+def test_validate_update_rejects_invalid_timezone(cfg):
+    with pytest.raises(ValueError, match="timezone"):
+        cfg.update({"timezone": "Mars/Phobos"})
+
+
+def test_validate_update_rejects_concurrency_out_of_range(cfg):
+    with pytest.raises(ValueError, match="concurrency"):
+        cfg.update({"concurrency": 0})
+    with pytest.raises(ValueError, match="concurrency"):
+        cfg.update({"concurrency": 33})
+
+
+def test_validate_update_rejects_max_file_size_out_of_range(cfg):
+    with pytest.raises(ValueError, match="max_file_size_gb"):
+        cfg.update({"max_file_size_gb": 0})
+    with pytest.raises(ValueError, match="max_file_size_gb"):
+        cfg.update({"max_file_size_gb": 101})
+
+
+def test_validate_update_rejects_circuit_breaker_out_of_range(cfg):
+    with pytest.raises(ValueError, match="circuit_breaker_threshold"):
+        cfg.update({"circuit_breaker_threshold": -0.1})
+    with pytest.raises(ValueError, match="circuit_breaker_threshold"):
+        cfg.update({"circuit_breaker_threshold": 1.1})
+
+
+def test_validate_update_rejects_bad_exclude_patterns(cfg):
+    with pytest.raises(ValueError, match="exclude_patterns"):
+        cfg.update({"exclude_patterns": "*.tmp"})
+
+
+def test_validate_update_accepts_valid_values(cfg):
+    cfg.update({
+        "schedule_time": "09:30",
+        "timezone": "UTC",
+        "concurrency": 8,
+        "max_file_size_gb": 10,
+        "circuit_breaker_threshold": 0.1,
+        "exclude_patterns": ["*.tmp", "~$*"],
+    })
+    assert cfg.schedule_time == "09:30"
+    assert cfg.timezone == "UTC"
+    assert cfg.concurrency == 8
+
+
 # ── Safe export ───────────────────────────────────────────────────────────────
 
 def test_to_dict_safe_excludes_smtp_password(cfg):
