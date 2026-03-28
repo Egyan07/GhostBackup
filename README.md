@@ -5,8 +5,8 @@
 ### Automated Backup with Encryption & Audit Logging
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
-![Backend Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-385%20passing-brightgreen)
+![Backend Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-396%20passing-brightgreen)
 ![GitHub issues](https://img.shields.io/github/issues/Egyan07/GhostBackup)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Egyan07/GhostBackup)
 ![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
@@ -158,7 +158,7 @@ Before adopting GhostBackup, understand what it **does not** do:
 ## 🧪 Testing
 
 ```bash
-# Backend — 325 tests, 88% line coverage
+# Backend — 336 tests, 90% line coverage
 cd backend
 python -m pytest tests/ -v --cov=. --cov-report=term-missing
 
@@ -168,7 +168,7 @@ npm test
 
 | Suite | Tests | Coverage | Type | CI |
 |-------|-------|----------|------|----|
-| Backend | 325 | 88% line | Unit + integration | ✅ GitHub Actions |
+| Backend | 336 | 90% line | Unit + integration | ✅ GitHub Actions |
 | Frontend | 60 | — | Unit (Vitest) | ✅ GitHub Actions |
 
 **What's tested:**
@@ -403,7 +403,8 @@ GhostBackup/
 | Path Safety | Restore endpoint validates all paths against traversal attacks before any file operation. |
 | Electron Sandbox | Chromium sandbox enabled. CSP enforced in both dev and production builds. |
 | Credential Storage | Secrets in `.env.local` with input sanitization on writes. Excluded from version control. |
-| Database Integrity | SQLite with `PRAGMA synchronous=FULL`. File records committed every 100 inserts during a run — crash data loss limited to at most 100 files. Schema versioned with incremental delta migrations. |
+| Database Integrity | SQLite with `PRAGMA synchronous=FULL`. File records committed every 100 inserts during a run — crash data loss limited to at most 100 files. WAL checkpoint after every run prevents unbounded WAL growth. Schema versioned with incremental delta migrations. |
+| Key Rotation Safety | Each backed-up file stores a SHA-256 fingerprint of the encryption key used. On restore, a fingerprint mismatch triggers a warning — detects silent restore failures after key rotation. |
 | Process Safety | Before killing a conflicting process on port 8765, GhostBackup verifies it's a Python/GhostBackup process. Will not kill unrelated processes. |
 | Data Integrity | xxhash checksum computed at source, verified after every copy to primary and secondary drives. |
 | Failure Protection | Configurable failure threshold (default 5%, min 3 files). If exceeded per library, that library aborts. |

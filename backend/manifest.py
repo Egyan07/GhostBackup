@@ -52,7 +52,7 @@ class ManifestDB:
 
     # ── Schema ────────────────────────────────────────────────────────────────
 
-    _SCHEMA_VERSION = 2
+    _SCHEMA_VERSION = 3
 
     def _migrate(self) -> None:
         with self._lock:
@@ -161,6 +161,27 @@ class ManifestDB:
                 self._conn.commit()
                 logger.info("DB migrated to schema v2")
 
+            if current < 3:
+                # v3: add key_fingerprint to files — tracks which encryption key was used
+                try:
+                    self._conn.execute(
+                        "ALTER TABLE files ADD COLUMN key_fingerprint TEXT"
+                    )
+                except Exception:
+                    pass  # column may already exist
+                self._conn.execute(
+                    "UPDATE schema_version SET version = 3"
+                )
+                self._conn.commit()
+                logger.info("DB migrated to schema v3")
+
+    # ── WAL maintenance ────────────────────────────────────────────────────────
+
+    def checkpoint(self) -> None:
+        """Run a WAL checkpoint to prevent unbounded WAL file growth."""
+        with self._lock:
+            self._conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+
     # ── Run lifecycle ─────────────────────────────────────────────────────────
 
     def create_run(self, full_backup: bool = False) -> int:
@@ -216,6 +237,7 @@ class ManifestDB:
             )
             self._conn.commit()
         logger.info(f"Run #{run_id} finalized — {status}")
+        self.checkpoint()
 
     def mark_run_pruned(self, run_date_start: str, run_date_end: str) -> None:
         """
@@ -238,13 +260,19 @@ class ManifestDB:
     _record_file_count: int = 0
     _COMMIT_EVERY: int = 100
 
-    def record_file(self, run_id: int, file_meta: dict, backup_path: str) -> None:
+    def record_file(
+        self,
+        run_id: int,
+        file_meta: dict,
+        backup_path: str,
+        key_fingerprint: Optional[str] = None,
+    ) -> None:
         with self._lock:
             self._conn.execute(
                 """INSERT INTO files
                     (run_id, source_label, name, original_path, backup_path,
-                     size, xxhash, last_modified, transferred_at)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                     size, xxhash, last_modified, transferred_at, key_fingerprint)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (
                     run_id,
                     file_meta.get("source_label", file_meta.get("library", "")),
@@ -255,6 +283,7 @@ class ManifestDB:
                     file_meta.get("xxhash", ""),
                     file_meta.get("mtime"),
                     datetime.now(timezone.utc).isoformat(),
+                    key_fingerprint,
                 ),
             )
             self._record_file_count += 1

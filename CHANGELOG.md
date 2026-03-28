@@ -4,6 +4,23 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v2.7.0 — WAL Checkpoint, Key Fingerprint Tracking & Backup Job Integration Tests
+
+### Reliability
+- **WAL checkpoint after every run** (`manifest.py`): `finalize_run()` now calls `PRAGMA wal_checkpoint(PASSIVE)` after each run commit — prevents unbounded WAL file growth on long-running installations
+
+### Security
+- **Encryption key fingerprint tracking** (`syncer.py`, `manifest.py`, `api.py`): Each backed-up file now stores a 16-hex-char SHA-256 fingerprint of the derived AES key in the `key_fingerprint` column (schema v3). On restore, if the stored fingerprint doesn't match the current key, a warning is logged before decryption — detects key rotation without re-encryption of historical backups
+- `_CryptoHelper.key_fingerprint` property — first 16 hex chars of SHA-256 of the 32-byte AES key, safe to store in the DB
+- `LocalSyncer.key_fingerprint` property — exposes crypto fingerprint as a public property
+
+### Testing
+- **11 integration tests for `run_backup_job`** (`test_backup_job.py`): covers success path (no files, with files, skipped count, full backup flag), failure paths (SSD not ready, no sources, copy failure, already running, missing source folder), and source filtering
+- `api.py` coverage: 66% → **81%**
+- **Total: 325 → 336 backend tests passing, 88% → 90% overall coverage**
+
+---
+
 ## v2.6.0 — Security Hardening, Reliability & Architecture Completion
 
 ### Security

@@ -152,7 +152,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="2.6.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="2.7.0", lifespan=lifespan)
 
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
@@ -391,7 +391,10 @@ async def run_backup_job(
                                     fm, run_id, on_progress=_progress_cb
                                 ),
                             )
-                            manifest.record_file(run_id, file_meta, backup_path)
+                            manifest.record_file(
+                                run_id, file_meta, backup_path,
+                                key_fingerprint=syncer.key_fingerprint,
+                            )
                             with _run_mutex:
                                 lib_state["files_transferred"] += 1
                                 lib_state["bytes"] += file_meta["size"]

@@ -81,6 +81,19 @@ class _CryptoHelper:
     def enabled(self) -> bool:
         return self._aesgcm is not None
 
+    @property
+    def key_fingerprint(self) -> Optional[str]:
+        """First 16 hex chars of a SHA-256 hash of the derived AES key — never the key itself."""
+        if self._aesgcm is None:
+            return None
+        import hashlib
+        # _aesgcm._key is the raw 32-byte AES key stored by the AESGCM object
+        try:
+            raw = self._aesgcm._key
+        except AttributeError:
+            return None
+        return hashlib.sha256(raw).hexdigest()[:16]
+
     @staticmethod
     def _is_stream_format(path: Path) -> bool:
         """Return True if the file starts with the streaming format header."""
@@ -282,6 +295,11 @@ class LocalSyncer:
     def encryption_active(self) -> bool:
         """True when encryption is initialised and ready."""
         return self._crypto.enabled
+
+    @property
+    def key_fingerprint(self) -> Optional[str]:
+        """First 16 hex chars of SHA-256 of the derived AES key — safe to store, never the key."""
+        return self._crypto.key_fingerprint
 
     def _cleanup_orphan_tmp_files(self) -> None:
         """Remove any .ghosttmp files left behind by a previous interrupted run."""
@@ -536,6 +554,14 @@ class LocalSyncer:
 
             try:
                 dest.parent.mkdir(parents=True, exist_ok=True)
+                # Warn if this file was encrypted with a different key than the current one
+                file_fp = f.get("key_fingerprint")
+                if file_fp and self._crypto.key_fingerprint and file_fp != self._crypto.key_fingerprint:
+                    logger.warning(
+                        f"Key fingerprint mismatch for {src.name}: "
+                        f"file={file_fp}, current={self._crypto.key_fingerprint}. "
+                        f"Restore may fail if the encryption key has been rotated."
+                    )
                 if self._crypto.enabled:
                     self._crypto.decrypt_to(src, dest)
                 else:
