@@ -108,6 +108,24 @@ def test_record_and_retrieve_file(db):
     assert files[0]["source_label"] == "Accounts"
 
 
+def test_record_file_stores_key_fingerprint(db):
+    run_id = db.create_run()
+    db.record_file(run_id, {
+        "source_label":  "Accounts",
+        "name":          "contract.pdf",
+        "original_path": "/data/contract.pdf",
+        "size":          512,
+        "mtime":         1_700_000_000.0,
+        "xxhash":        "def456",
+    }, "/backup/Accounts/contract.pdf", key_fingerprint="abcd1234efgh5678")
+
+    row = db._conn.execute(
+        "SELECT key_fingerprint FROM files WHERE name = 'contract.pdf'"
+    ).fetchone()
+    assert row is not None
+    assert row[0] == "abcd1234efgh5678"
+
+
 def test_get_files_filtered_by_library(db):
     run_id = db.create_run()
     db.record_file(run_id, {

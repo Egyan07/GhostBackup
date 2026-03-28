@@ -128,6 +128,9 @@ class TestHealth:
     def test_reports_encryption_active(self, client):
         assert client.get("/health").json()["encryption_active"] is True
 
+    def test_reports_hkdf_salt_active(self, client):
+        assert "hkdf_salt_active" in client.get("/health").json()
+
     def test_includes_schedule_metadata(self, client):
         data = client.get("/health").json()
         assert data["schedule"]["time"] == "08:00"

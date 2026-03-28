@@ -17,7 +17,7 @@ All notable changes to GhostBackup are documented here.
 ### Testing
 - **11 integration tests for `run_backup_job`** (`test_backup_job.py`): covers success path (no files, with files, skipped count, full backup flag), failure paths (SSD not ready, no sources, copy failure, already running, missing source folder), and source filtering
 - `api.py` coverage: 66% → **81%**
-- **Total: 325 → 336 backend tests passing, 88% → 90% overall coverage**
+- **Total: 325 → 338 backend tests passing, 88% → 90% overall coverage**
 
 ---
 
