@@ -161,7 +161,7 @@ function killPortConflict(port) {
 
       try {
         const info = execSync(
-          `wmic process where "ProcessId=${pid}" get Name /format:value`,
+          `tasklist /FI "PID eq ${pid}" /FO CSV /NH`,
           { encoding: "utf8", windowsHide: true }
         ).toLowerCase();
 
@@ -637,11 +637,17 @@ app.on("quit", () => {
   console.log("[main] App quitting — killing Python backend...");
   if (pythonProcess && !pythonProcess.killed) {
     pythonProcess.kill("SIGTERM");
+    // Give it 1s to exit gracefully, then force-kill and clean up the port
     setTimeout(() => {
       if (pythonProcess && !pythonProcess.killed) {
         pythonProcess.kill("SIGKILL");
       }
-    }, 3000);
+      // Final safety net: kill anything still holding the port
+      killPortConflict(API_PORT);
+    }, 1000);
+  } else {
+    // Process already gone — still clean up port just in case
+    killPortConflict(API_PORT);
   }
   tray?.destroy();
 });
