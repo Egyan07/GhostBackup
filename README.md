@@ -292,21 +292,21 @@ GhostBackup/
 
 ## 🛠 Troubleshooting
 
-**Q: I get "port already in use" every time I open the app.**
-A: You closed the app with the X button, which hides it to tray — it was still running in the background. Always quit via File → Exit or right-click the tray icon → Quit GhostBackup. This fully exits and releases port 8765.
+- **Q: I get "port already in use" every time I open the app.**  
+  A: You closed the app with the X button, which hides it to tray — it was still running in the background. Always quit via **File → Exit** or right-click the tray icon → **Quit GhostBackup**. This fully exits and releases port 8765.
 
-**Q: The splash screen shows "backup service stopped unexpectedly (exit code 1)".**
-A: Your Python dependencies are out of sync. Run:
-```
-pip install -r backend/requirements.txt
-```
-Then relaunch via `start.bat`.
+- **Q: The splash screen shows "backup service stopped unexpectedly (exit code 1)".**  
+  A: Your Python dependencies are out of sync. Run:
 
-**Q: Email alerts aren't arriving.**
-A: Make sure you're using a Gmail App Password, not your regular Gmail password. Generate one at `https://myaccount.google.com/apppasswords`. In Settings, set SMTP host to `smtp.gmail.com`, port `587`, enter your Gmail address in both From and Recipients, save — then click Send Test Email to verify.
+      pip install -r backend/requirements.txt
 
-**Q: The backup isn't running at the scheduled time.**
-A: Check the green dot in the sidebar — if it's grey or red, the scheduler isn't running (restart the app). Also verify `schedule.time` and `schedule.timezone` in `config.yaml` are correct for your timezone.
+  Then relaunch via `start.bat`.
+
+- **Q: Email alerts aren't arriving.**  
+  A: Make sure you're using a Gmail App Password, not your regular Gmail password. Generate one at https://myaccount.google.com/apppasswords. In Settings, set SMTP host to `smtp.gmail.com`, port `587`, enter your Gmail address in both From and Recipients, save — then click **Send Test Email** to verify.
+
+- **Q: The backup isn't running at the scheduled time.**  
+  A: Check the green dot in the sidebar — if it's grey or red, the scheduler isn't running (restart the app). Also verify `schedule.time` and `schedule.timezone` in `config.yaml` are correct for your timezone.
 
 ---
 
