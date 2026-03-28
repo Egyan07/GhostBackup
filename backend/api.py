@@ -140,7 +140,39 @@ async def lifespan(app: FastAPI):
         )
 
     logger.info(f"GhostBackup API ready on http://127.0.0.1:{API_PORT}")
+
+    # ── Background SSD health polling ─────────────────────────────────────────
+    _ssd_poll_stop = asyncio.Event()
+
+    async def _poll_ssd_health() -> None:
+        last_status = None
+        while not _ssd_poll_stop.is_set():
+            try:
+                status = get_ssd_status(_config.ssd_path)
+                current = status.get("status")
+                if last_status is not None and current != last_status:
+                    level = "warn" if current == "ok" else "error"
+                    await _reporter.alert_and_notify(
+                        level=level,
+                        title="SSD status changed",
+                        body=f"Primary SSD status: {last_status} → {current}",
+                        send_email=(current != "ok"),
+                    )
+                last_status = current
+            except Exception as poll_err:
+                logger.debug(f"SSD poll error: {poll_err}")
+            await asyncio.sleep(300)  # 5 minutes
+
+    ssd_poll_task = asyncio.create_task(_poll_ssd_health())
+
     yield
+
+    _ssd_poll_stop.set()
+    ssd_poll_task.cancel()
+    try:
+        await ssd_poll_task
+    except asyncio.CancelledError:
+        pass
 
     logger.info("GhostBackup API shutting down…")
     if _watcher and _watcher.is_running:
@@ -493,8 +525,8 @@ async def run_backup_job(
 
         manifest.finalize_run(run_id, _active_run)
 
-        await _retry_locked_files(run_id)
-        await _backup_manifest_to_ssd()
+        await _retry_locked_files(run_id, cfg=cfg, syncer=syncer, manifest=manifest)
+        await _backup_manifest_to_ssd(cfg=cfg, manifest=manifest)
         await reporter.send_run_report(_active_run)
 
         logger.info(f"Run #{run_id} complete — {final_status}")
@@ -514,8 +546,17 @@ async def run_backup_job(
         )
 
 
-async def _retry_locked_files(run_id: int) -> None:
+async def _retry_locked_files(
+    run_id: int,
+    cfg: "ConfigManager" = None,
+    syncer: "LocalSyncer" = None,
+    manifest: "ManifestDB" = None,
+) -> None:
     """Attempt a second pass on files that failed due to locking."""
+    cfg      = cfg      or _config
+    syncer   = syncer   or _syncer
+    manifest = manifest or _manifest
+
     locked = [
         e for e in _active_run.get("errors", [])
         if "locked" in e.get("error", "").lower()
@@ -541,7 +582,7 @@ async def _retry_locked_files(run_id: int) -> None:
             try:
                 stat = src.stat()
                 source_root = next(
-                    (s["path"] for s in _config.get_enabled_sources()
+                    (s["path"] for s in cfg.get_enabled_sources()
                      if s.get("label") == label),
                     str(src.parent),
                 )
@@ -552,16 +593,16 @@ async def _retry_locked_files(run_id: int) -> None:
                     "rel_path":      str(src.relative_to(Path(source_root))),
                     "size":          stat.st_size,
                     "mtime":         stat.st_mtime,
-                    "xxhash":        _syncer.hash_file(src),
+                    "xxhash":        syncer.hash_file(src),
                 }
             except Exception:
                 continue
 
         try:
             backup_path = await loop.run_in_executor(
-                None, lambda fm=file_meta: _syncer.copy_file(fm, run_id)
+                None, lambda fm=file_meta: syncer.copy_file(fm, run_id)
             )
-            _manifest.record_file(run_id, file_meta, backup_path)
+            manifest.record_file(run_id, file_meta, backup_path)
             with _run_mutex:
                 _active_run["files_transferred"] += 1
                 _active_run["files_failed"] = max(_active_run["files_failed"] - 1, 0)
@@ -574,14 +615,19 @@ async def _retry_locked_files(run_id: int) -> None:
             logger.warning(f"Locked file retry failed: {file_meta.get('name', src_path)} — {retry_err}")
 
 
-async def _backup_manifest_to_ssd() -> None:
+async def _backup_manifest_to_ssd(
+    cfg: "ConfigManager" = None,
+    manifest: "ManifestDB" = None,
+) -> None:
     """Copy the manifest database to the SSD after every successful run."""
-    if not _config.ssd_path:
+    cfg      = cfg      or _config
+    manifest = manifest or _manifest
+    if not cfg.ssd_path:
         return
     try:
-        db_dest = Path(_config.ssd_path) / ".ghostbackup" / "ghostbackup.db"
+        db_dest = Path(cfg.ssd_path) / ".ghostbackup" / "ghostbackup.db"
         db_dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(_manifest.db_path), str(db_dest))
+        shutil.copy2(str(manifest.db_path), str(db_dest))
         logger.info(f"Manifest DB backed up to SSD: {db_dest}")
     except Exception as db_err:
         logger.warning(f"Manifest DB backup to SSD failed: {db_err}")

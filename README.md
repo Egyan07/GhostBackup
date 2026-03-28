@@ -6,7 +6,7 @@
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
 ![Backend Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-338%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-398%20passing-brightgreen)
 ![GitHub issues](https://img.shields.io/github/issues/Egyan07/GhostBackup)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Egyan07/GhostBackup)
 ![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
@@ -371,7 +371,7 @@ GhostBackup/
 │   ├── syncer.py            ← backup engine (scan, encrypt, copy, verify, prune)
 │   ├── utils.py             ← shared helpers (fmt_bytes, fmt_duration)
 │   ├── watcher.py           ← watchdog real-time file watcher
-│   └── tests/               ← 278 pytest tests
+│   └── tests/               ← 338 pytest tests
 │
 ├── electron/
 │   ├── main.js              ← Electron main process (spawns backend, tray)
