@@ -530,7 +530,7 @@ Originally built for Red Parrot Accounting, now open-sourced under MIT. Contribu
 
 ## 📄 License
 
-MIT License — see LICENSE for full text.
+MIT License — see [LICENSE](LICENSE) for full text.
 
 ---
 
