@@ -527,7 +527,7 @@ class LocalSyncer:
                             if on_progress:
                                 on_progress(str(rel_path), len(buf))
                 restored += 1
-            except Exception as e:
+            except (PermissionError, OSError, RuntimeError) as e:
                 errors.append({"file": str(rel_path), "error": str(e)})
                 failed += 1
 
@@ -589,7 +589,7 @@ class LocalSyncer:
                         })
                     else:
                         verified += 1
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     failed += 1
                     errors.append({"file": name, "error": f"Verification error: {e}"})
 

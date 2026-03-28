@@ -11,7 +11,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from watcher import _SourceHandler, DEBOUNCE_SECONDS, COOLDOWN_SECONDS
+import asyncio
+from unittest.mock import patch
+
+from watcher import _SourceHandler, FileWatcher, DEBOUNCE_SECONDS, COOLDOWN_SECONDS
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -132,3 +135,92 @@ class TestWatcherExclusions:
         assert handler._pending_count == 0
 
         handler.cancel()
+
+
+# ── FileWatcher lifecycle ─────────────────────────────────────────────────────
+
+def _make_watcher_config(tmp_path):
+    cfg = MagicMock()
+    cfg.exclude_patterns = []
+    cfg.watcher_debounce_seconds = 0.1
+    cfg.watcher_cooldown_seconds = 1
+    cfg.get_enabled_sources.return_value = [{"label": "Docs", "path": str(tmp_path)}]
+    return cfg
+
+
+class TestFileWatcherLifecycle:
+    def test_start_sets_is_running(self, tmp_path):
+        cfg  = _make_watcher_config(tmp_path)
+        loop = asyncio.new_event_loop()
+        w    = FileWatcher(cfg, MagicMock(), loop)
+        with patch.object(w._observer, "start"), patch.object(w._observer, "stop"), \
+             patch.object(w._observer, "join"):
+            w.start()
+            assert w.is_running is True
+            w.stop()
+        loop.close()
+
+    def test_stop_clears_is_running(self, tmp_path):
+        cfg  = _make_watcher_config(tmp_path)
+        loop = asyncio.new_event_loop()
+        w    = FileWatcher(cfg, MagicMock(), loop)
+        with patch.object(w._observer, "start"), patch.object(w._observer, "stop"), \
+             patch.object(w._observer, "join"):
+            w.start()
+            w.stop()
+            assert w.is_running is False
+        loop.close()
+
+    def test_start_twice_is_idempotent(self, tmp_path):
+        cfg  = _make_watcher_config(tmp_path)
+        loop = asyncio.new_event_loop()
+        w    = FileWatcher(cfg, MagicMock(), loop)
+        with patch.object(w._observer, "start") as mock_start, \
+             patch.object(w._observer, "stop"), patch.object(w._observer, "join"):
+            w.start()
+            w.start()  # second call should be a no-op
+            assert mock_start.call_count == 1
+            w.stop()
+        loop.close()
+
+    def test_stop_when_not_running_is_safe(self, tmp_path):
+        cfg  = _make_watcher_config(tmp_path)
+        loop = asyncio.new_event_loop()
+        w    = FileWatcher(cfg, MagicMock(), loop)
+        w.stop()  # should not raise
+        loop.close()
+
+    def test_reload_sources_restarts_observer(self, tmp_path):
+        cfg  = _make_watcher_config(tmp_path)
+        loop = asyncio.new_event_loop()
+        w    = FileWatcher(cfg, MagicMock(), loop)
+        with patch.object(w._observer, "start"), patch.object(w._observer, "stop"), \
+             patch.object(w._observer, "join"):
+            w.start()
+            old_observer = w._observer
+            w.reload_sources()
+            assert w._observer is not old_observer  # new Observer created
+            assert w.is_running is True
+            w.stop()
+        loop.close()
+
+    def test_status_reflects_running_state(self, tmp_path):
+        cfg  = _make_watcher_config(tmp_path)
+        loop = asyncio.new_event_loop()
+        w    = FileWatcher(cfg, MagicMock(), loop)
+        s = w.status()
+        assert s["running"] is False
+        assert "sources" in s
+        loop.close()
+
+    def test_dispatch_with_no_loop_does_not_raise(self, tmp_path):
+        cfg  = _make_watcher_config(tmp_path)
+        w    = FileWatcher(cfg, MagicMock(), None)
+        w._dispatch("Docs")  # loop is None — should log and return
+
+    def test_dispatch_with_closed_loop_does_not_raise(self, tmp_path):
+        cfg  = _make_watcher_config(tmp_path)
+        loop = asyncio.new_event_loop()
+        loop.close()
+        w = FileWatcher(cfg, MagicMock(), loop)
+        w._dispatch("Docs")  # closed loop — should log and return

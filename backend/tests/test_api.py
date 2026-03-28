@@ -414,6 +414,30 @@ class TestWatcher:
         api_module._watcher.is_running = False
         assert client.post("/watcher/start").status_code == 400
 
+    def test_watcher_start_when_already_running(self, client):
+        import api as api_module
+        api_module._watcher.is_running = True
+        api_module._watcher.status.return_value = {"running": True, "sources": []}
+        r = client.post("/watcher/start")
+        assert r.status_code == 200
+        assert "already" in r.json()["message"].lower()
+
+    def test_watcher_start_with_sources(self, client):
+        import api as api_module
+        api_module._watcher.is_running = False
+        api_module._config.get_enabled_sources.return_value = [{"label": "Docs", "path": "/tmp"}]
+        api_module._watcher.status.return_value = {"running": True, "sources": []}
+        r = client.post("/watcher/start")
+        assert r.status_code == 200
+        api_module._watcher.reload_sources.assert_called()
+
+    def test_watcher_stop_when_running(self, client):
+        import api as api_module
+        api_module._watcher.is_running = True
+        r = client.post("/watcher/stop")
+        assert r.status_code == 200
+        api_module._watcher.stop.assert_called()
+
 
 # ── /settings/encryption/generate-key ─────────────────────────────────────────
 
@@ -549,6 +573,37 @@ class TestCancelledRunStatus:
 
         assert final_status == "cancelled"
         api_mod._active_run = None
+
+
+class TestPrune:
+    def test_prune_rejected_while_backup_running(self, client):
+        client._api._active_run = {"status": "running"}
+        assert client.post("/settings/prune").status_code == 409
+
+    def test_prune_accepted_when_idle(self, client):
+        client._api._active_run = None
+        r = client.post("/settings/prune")
+        assert r.status_code == 200
+        assert "started" in r.json()["message"].lower()
+
+
+class TestDashboard:
+    def test_dashboard_returns_expected_keys(self, client):
+        import api as api_module
+        api_module._manifest.get_runs.return_value = []
+        api_module._scheduler.next_run_time.return_value = "08:00"
+        r = client.get("/dashboard")
+        assert r.status_code == 200
+        data = r.json()
+        assert "runs" in data
+        assert "ssd_storage" in data
+        assert "next_run" in data
+
+
+class TestSsdStatus:
+    def test_ssd_status_returns_200(self, client):
+        r = client.get("/ssd/status")
+        assert r.status_code == 200
 
 
 class TestVerifyEndpoint:
