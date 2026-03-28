@@ -52,9 +52,8 @@ _scheduler:  Optional[BackupScheduler] = None
 _reporter:   Optional[Reporter]        = None
 _syncer:     Optional[LocalSyncer]     = None
 _watcher:    Optional[FileWatcher]     = None
-_active_run:      Optional[dict]            = None
-_active_run_lock: Optional[asyncio.Lock]    = None
-_run_mutex:       threading.Lock            = threading.Lock()  # protects _active_run mutations from thread pool
+_active_run: Optional[dict]  = None
+_run_mutex:  threading.Lock = threading.Lock()  # protects _active_run mutations from thread pool
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
 _limiter = Limiter(key_func=get_remote_address)
@@ -103,15 +102,14 @@ async def _desktop_notify(title: str, body: str) -> None:
 
     try:
         await asyncio.to_thread(_blocking_notify)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Desktop notification failed: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _config, _manifest, _scheduler, _reporter, _syncer, _watcher, _active_run_lock
+    global _config, _manifest, _scheduler, _reporter, _syncer, _watcher
 
-    _active_run_lock = asyncio.Lock()
     logger.info("GhostBackup API starting…")
 
     _config   = ConfigManager()
@@ -736,14 +734,14 @@ async def get_config_audit(limit: int = Query(default=100, ge=1, le=1000)):
 @_limiter.limit("5/minute")
 async def restore(request: Request, req: RestoreRequest, background_tasks: BackgroundTasks,
                   manifest: ManifestDB = Depends(get_manifest), syncer: LocalSyncer = Depends(get_syncer)):
-    run = _manifest.get_run(req.run_id)
+    run = manifest.get_run(req.run_id)
     if not run:
         raise HTTPException(404, f"Run #{req.run_id} not found")
     if run["status"] == "failed":
         raise HTTPException(400, "Cannot restore from a failed run")
 
-    files = _manifest.get_files(req.run_id, library=req.library,
-                                subfolder=req.subfolder)
+    files = manifest.get_files(req.run_id, library=req.library,
+                               subfolder=req.subfolder)
     if not files:
         raise HTTPException(404, "No files found matching the restore criteria")
 
@@ -767,7 +765,7 @@ async def restore(request: Request, req: RestoreRequest, background_tasks: Backg
     loop = asyncio.get_running_loop()
     try:
         result = await loop.run_in_executor(
-            None, lambda: _syncer.restore_files(files, req.destination)
+            None, lambda: syncer.restore_files(files, req.destination)
         )
         return {
             "dry_run":      False,
@@ -795,15 +793,15 @@ async def verify_backups(request: Request, background_tasks: BackgroundTasks,
     """
     if _active_run and _active_run.get("status") == "running":
         raise HTTPException(409, "Cannot verify while a backup is running")
-    background_tasks.add_task(_do_verify, source_label)
+    background_tasks.add_task(_do_verify, source_label, syncer)
     return {"message": "Verification started", "source": source_label or "all"}
 
 
-async def _do_verify(source_label: Optional[str] = None):
+async def _do_verify(source_label: Optional[str] = None, syncer: LocalSyncer = None):
     loop   = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None,
-        lambda: _syncer.verify_backups(source_label),
+        lambda: (syncer or _syncer).verify_backups(source_label),
     )
     level = "error" if (result["failed"] or result["missing"]) else "info"
     _reporter.alerts.add(
@@ -835,7 +833,7 @@ async def update_smtp(req: SmtpUpdateRequest):
 @_limiter.limit("3/minute")
 async def test_smtp(request: Request, reporter: Reporter = Depends(get_reporter)):
     try:
-        await _reporter.send_test_email()
+        await reporter.send_test_email()
         return {"message": "Test email sent successfully"}
     except Exception as e:
         raise HTTPException(500, f"SMTP test failed: {e}")
