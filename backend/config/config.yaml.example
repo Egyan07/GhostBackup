@@ -54,6 +54,10 @@ retention:
 # Stop a source library if more than this fraction of files fail in one run
 circuit_breaker_threshold: 0.05
 
+watcher:
+  debounce_seconds: 15   # Wait this long after last file change before triggering backup
+  cooldown_seconds: 120  # Minimum gap between watcher-triggered backups
+
 smtp:
   host: smtp.office365.com
   port: 587

@@ -8,6 +8,7 @@ configuration audit trail for compliance reporting.
 
 import json
 import logging
+import os
 import socket
 import sqlite3
 import threading
@@ -19,7 +20,7 @@ from utils import fmt_bytes as _fmt_bytes, fmt_duration as _fmt_duration
 
 logger = logging.getLogger("manifest")
 
-DB_PATH = Path(__file__).parent / "ghostbackup.db"
+DB_PATH = Path(os.getenv("GHOSTBACKUP_DB_PATH", str(Path(__file__).parent / "ghostbackup.db")))
 
 
 class ManifestDB:

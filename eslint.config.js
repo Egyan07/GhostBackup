@@ -22,7 +22,6 @@ module.exports = [
         clearTimeout: "readonly",
         setInterval: "readonly",
         clearInterval: "readonly",
-        // ADD THESE:
         Event: "readonly",
         Blob: "readonly",
         URL: "readonly",

@@ -545,6 +545,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle("app:api-url",   async () => API_URL);
   ipcMain.handle("app:version",   async () => app.getVersion());
+  ipcMain.handle("app:author",    async () => require(path.join(ROOT_DIR, "package.json")).author || "");
   ipcMain.handle("app:api-token", async () => API_TOKEN);
 
   ipcMain.handle("backend:status", async () => ({

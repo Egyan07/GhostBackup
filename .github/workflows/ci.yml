@@ -45,7 +45,7 @@ jobs:
             --tb=short \
             --cov=backend \
             --cov-report=term-missing \
-            --cov-fail-under=70
+            --cov-fail-under=80
         env:
           GHOSTBACKUP_CONFIG: backend/config/config.yaml.example
           GHOSTBACKUP_API_PORT: "8765"
@@ -130,4 +130,4 @@ jobs:
       - name: Node dependency audit
         run: |
           npm ci
-          npm audit --audit-level=high || true
+          npm audit --audit-level=high

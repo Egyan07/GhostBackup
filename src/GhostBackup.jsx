@@ -50,9 +50,11 @@ export default function App() {
   const [health, setHealth] = useState(null);
   const [clock,  setClock]  = useState("");
   const [appVersion, setAppVersion] = useState("v2.0.0");
+  const [appAuthor,  setAppAuthor]  = useState("");
 
   useEffect(() => {
     window.ghostbackup?.version?.().then(v => { if (v) setAppVersion("v" + v); });
+    window.ghostbackup?.author?.().then(a => { if (a) setAppAuthor(a); });
   }, []);
 
   useEffect(() => {
@@ -118,7 +120,7 @@ export default function App() {
 
         <div className="sidebar-footer">
           <span className="version-chip">{appVersion}</span>
-          <span style={{ flex: 1 }}>Egyan · IT</span>
+          {appAuthor && <span style={{ flex: 1 }}>{appAuthor}</span>}
         </div>
       </div>
 

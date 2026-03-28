@@ -38,7 +38,7 @@ The installer will:
 1. Verify Python 3.10+ and Node.js 18+ are present
 2. Create a Python virtual environment (`.venv`)
 3. Install all Python packages from `backend/requirements.txt`
-4. Install all Node packages via `npm install`
+4. Install all Node packages via `npm ci`
 5. Ask you for:
    - The **source folder** to back up (your SharePoint-synced folder)
    - The **primary SSD drive path** (e.g. `D:\GhostBackup`)
@@ -144,7 +144,7 @@ sources:
 ### Step 6 — Node dependencies
 
 ```
-npm install
+npm ci
 ```
 
 ### Step 7 — Launch

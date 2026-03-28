@@ -1,8 +1,8 @@
 {
   "name": "ghostbackup",
-  "version": "2.3.0",
+  "version": "2.3.2",
   "description": "SharePoint daily auto-backup system for Red Parrot Accounting",
-  "author": "Egyan <egyan@redparrot.co.uk>",
+  "author": "Egyan07",
   "private": true,
   "main": "electron/main.js",
   "scripts": {

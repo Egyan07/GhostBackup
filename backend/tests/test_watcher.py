@@ -36,6 +36,7 @@ class TestWatcherDebounce:
             source_path="/tmp/test",
             exclude_patterns=[],
             on_trigger=lambda label: triggered.append(label),
+            debounce_seconds=0.1,
         )
 
         # Fire many rapid events
@@ -46,7 +47,7 @@ class TestWatcherDebounce:
         assert len(triggered) == 0
 
         # Wait for the debounce period to elapse (add a small buffer)
-        time.sleep(DEBOUNCE_SECONDS + 1)
+        time.sleep(0.2)
 
         # Should have fired exactly once despite 20 events
         assert len(triggered) == 1

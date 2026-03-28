@@ -49,7 +49,7 @@ _reporter:   Optional[Reporter]        = None
 _syncer:     Optional[LocalSyncer]     = None
 _watcher:    Optional[FileWatcher]     = None
 _active_run:      Optional[dict]            = None
-_active_run_lock: asyncio.Lock              = asyncio.Lock()
+_active_run_lock: Optional[asyncio.Lock]    = None
 _run_mutex:       threading.Lock            = threading.Lock()  # protects _active_run mutations from thread pool
 
 
@@ -76,8 +76,9 @@ async def _desktop_notify(title: str, body: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _config, _manifest, _scheduler, _reporter, _syncer, _watcher
+    global _config, _manifest, _scheduler, _reporter, _syncer, _watcher, _active_run_lock
 
+    _active_run_lock = asyncio.Lock()
     logger.info("GhostBackup API starting…")
 
     _config   = ConfigManager()
@@ -120,7 +121,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="2.3.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="2.3.2", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -536,7 +537,7 @@ async def _backup_manifest_to_ssd() -> None:
 async def health():
     return {
         "status":            "ok",
-        "version":           "2.3.0",
+        "version":           "2.3.2",
         "scheduler_running": _scheduler.is_running() if _scheduler else False,
         "next_run":          _scheduler.next_run_time() if _scheduler else None,
         "schedule": {

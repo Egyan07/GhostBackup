@@ -33,12 +33,16 @@ class _SourceHandler(FileSystemEventHandler):
         source_path: str,
         exclude_patterns: list[str],
         on_trigger: Callable[[str], None],
+        debounce_seconds: int = DEBOUNCE_SECONDS,
+        cooldown_seconds: int = COOLDOWN_SECONDS,
     ):
         super().__init__()
         self.label            = label
         self.source_path      = source_path
         self.exclude_patterns = exclude_patterns
         self._on_trigger      = on_trigger
+        self._debounce_seconds = debounce_seconds
+        self._cooldown_seconds = cooldown_seconds
 
         self._pending: set[str]                   = set()
         self._lock                                 = threading.Lock()
@@ -62,7 +66,7 @@ class _SourceHandler(FileSystemEventHandler):
             self._pending_count = len(self._pending)
             if self._debounce_timer and self._debounce_timer.is_alive():
                 self._debounce_timer.cancel()
-            self._debounce_timer = threading.Timer(DEBOUNCE_SECONDS, self._fire)
+            self._debounce_timer = threading.Timer(self._debounce_seconds, self._fire)
             self._debounce_timer.daemon = True
             self._debounce_timer.start()
 
@@ -75,9 +79,9 @@ class _SourceHandler(FileSystemEventHandler):
         now = time.monotonic()
         if (
             self._last_triggered_mono is not None
-            and (now - self._last_triggered_mono) < COOLDOWN_SECONDS
+            and (now - self._last_triggered_mono) < self._cooldown_seconds
         ):
-            remaining = int(COOLDOWN_SECONDS - (now - self._last_triggered_mono))
+            remaining = int(self._cooldown_seconds - (now - self._last_triggered_mono))
             logger.debug(
                 f"[{self.label}] Watcher trigger suppressed — cooldown ({remaining}s remaining)"
             )
@@ -161,10 +165,12 @@ class FileWatcher:
                 logger.warning(f"[{label}] Skipping watcher — path not found: {path}")
                 continue
             handler = _SourceHandler(
-                label            = label,
-                source_path      = path,
-                exclude_patterns = patterns,
-                on_trigger       = self._dispatch,
+                label             = label,
+                source_path       = path,
+                exclude_patterns  = patterns,
+                on_trigger        = self._dispatch,
+                debounce_seconds  = self._config.watcher_debounce_seconds,
+                cooldown_seconds  = self._config.watcher_cooldown_seconds,
             )
             self._observer.schedule(handler, path, recursive=True)
             self._handlers[label] = handler
@@ -194,6 +200,6 @@ class FileWatcher:
         return {
             "running":          self._running,
             "sources":          [h.status() for h in self._handlers.values()],
-            "debounce_seconds": DEBOUNCE_SECONDS,
-            "cooldown_seconds": COOLDOWN_SECONDS,
+            "debounce_seconds": self._config.watcher_debounce_seconds,
+            "cooldown_seconds": self._config.watcher_cooldown_seconds,
         }

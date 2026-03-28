@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("ghostbackup", {
   // ── App info ──────────────────────────────────────────────────────────────
   apiUrl:        () => ipcRenderer.invoke("app:api-url"),
   version:       () => ipcRenderer.invoke("app:version"),
+  author:        () => ipcRenderer.invoke("app:author"),
   getApiToken:   () => ipcRenderer.invoke("app:api-token"),
   backendStatus: () => ipcRenderer.invoke("backend:status"),
 

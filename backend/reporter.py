@@ -25,6 +25,25 @@ logger = logging.getLogger("reporter")
 
 REPORT_DIR = Path(__file__).parent / "reports"
 
+_HEALTH_REPORT_TEMPLATE = (
+    '<!DOCTYPE html><html><head><title>GhostBackup Health</title>'
+    '<style>'
+    'body{font-family:monospace;background:#0e0f11;color:#e8eaf0;padding:24px;margin:0}'
+    'h1{color:#7c6ff7}'
+    'table{width:100%;border-collapse:collapse;background:#13141a;border:1px solid #1e2030}'
+    'th{padding:8px 12px;border-bottom:1px solid #1e2030;text-align:left;'
+    'color:#555872;font-size:9px;letter-spacing:2px;text-transform:uppercase}'
+    'td{padding:10px 12px;border-bottom:1px solid #1e2030;color:#8b8fa8;font-size:12px}'
+    'tr:hover td{background:#1a1d26}'
+    '</style></head>'
+    '<body><h1>GhostBackup \u2014 Health</h1>'
+    '<p style="color:#555872;font-size:11px">Generated: {generated}</p>'
+    '<table><thead><tr>'
+    '<th>#</th><th>Date</th><th>Status</th><th>Files</th>'
+    '<th>Data</th><th>Duration</th><th>Errors</th>'
+    '</tr></thead><tbody>{rows}</tbody></table></body></html>'
+)
+
 AlertLevel = Literal["info", "warn", "error", "critical"]
 
 _LEVEL_COLOURS = {
@@ -482,22 +501,7 @@ class Reporter:
             for r in runs
         )
         ts   = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        html = (
-            f'<!DOCTYPE html><html><head><title>GhostBackup Health</title>'
-            f'<style>body{{font-family:monospace;background:#0e0f11;color:#e8eaf0;padding:24px;margin:0}}'
-            f'h1{{color:#7c6ff7}}table{{width:100%;border-collapse:collapse;'
-            f'background:#13141a;border:1px solid #1e2030}}'
-            f'th{{padding:8px 12px;border-bottom:1px solid #1e2030;text-align:left;'
-            f'color:#555872;font-size:9px;letter-spacing:2px;text-transform:uppercase}}'
-            f'td{{padding:10px 12px;border-bottom:1px solid #1e2030;color:#8b8fa8;font-size:12px}}'
-            f'tr:hover td{{background:#1a1d26}}</style></head>'
-            f'<body><h1>GhostBackup — Health</h1>'
-            f'<p style="color:#555872;font-size:11px">Generated: {ts}</p>'
-            f'<table><thead><tr>'
-            f'<th>#</th><th>Date</th><th>Status</th><th>Files</th>'
-            f'<th>Data</th><th>Duration</th><th>Errors</th>'
-            f'</tr></thead><tbody>{rows}</tbody></table></body></html>'
-        )
+        html = _HEALTH_REPORT_TEMPLATE.format(rows=rows, generated=ts)
         path = REPORT_DIR / f"health_{datetime.now(timezone.utc).strftime('%Y%m%d')}.html"
         path.write_text(html, encoding="utf-8")
         return path

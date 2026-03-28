@@ -76,6 +76,11 @@ DEFAULTS: dict = {
     "sources": [],
 
     "circuit_breaker_threshold": 0.05,
+
+    "watcher": {
+        "debounce_seconds": 15,
+        "cooldown_seconds": 120,
+    },
 }
 
 
@@ -276,6 +281,16 @@ class ConfigManager:
     @property
     def circuit_breaker_threshold(self) -> float:
         return self._data.get("circuit_breaker_threshold", 0.05)
+
+    # ── Watcher ───────────────────────────────────────────────────────────────
+
+    @property
+    def watcher_debounce_seconds(self) -> int:
+        return self._data["watcher"]["debounce_seconds"]
+
+    @property
+    def watcher_cooldown_seconds(self) -> int:
+        return self._data["watcher"]["cooldown_seconds"]
 
     # ── Retention ─────────────────────────────────────────────────────────────
 
