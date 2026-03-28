@@ -601,6 +601,7 @@ async def health(cfg: ConfigManager = Depends(provide_config),
             "label": f"Daily at {cfg.schedule_time} {cfg.timezone}",
         },
         "encryption_active": syncer.encryption_active if syncer else False,
+        "hkdf_salt_active":  bool(cfg.hkdf_salt != b"ghostbackup-stream-v1"),
     }
 
 

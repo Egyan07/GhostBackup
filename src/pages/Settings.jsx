@@ -302,6 +302,12 @@ export default function Settings() {
               <span>No encryption key found in environment. Set <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>GHOSTBACKUP_ENCRYPTION_KEY</code> in <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>.env.local</code> to enable encryption.</span>
             </div>
           )}
+          {cfg?.encryption_active && !cfg?.hkdf_salt_active && (
+            <div className="alert alert-warn" style={{ flex: 1, marginBottom: 0 }}>
+              <span className="alert-icon">⚠</span>
+              <span>No per-installation salt set. Add <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>GHOSTBACKUP_HKDF_SALT</code> to <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>.env.local</code> for stronger key isolation. Existing backups are unaffected.</span>
+            </div>
+          )}
         </div>
         <div className="flex gap-10 items-center">
           <button
