@@ -572,40 +572,44 @@ async def _backup_manifest_to_ssd() -> None:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
-async def health():
+async def health(cfg: ConfigManager = Depends(provide_config),
+                 scheduler: BackupScheduler = Depends(get_scheduler),
+                 syncer: LocalSyncer = Depends(get_syncer)):
     return {
         "status":            "ok",
-        "version":           "2.3.2",
-        "scheduler_running": _scheduler.is_running() if _scheduler else False,
-        "next_run":          _scheduler.next_run_time() if _scheduler else None,
+        "version":           app.version,
+        "scheduler_running": scheduler.is_running() if scheduler else False,
+        "next_run":          scheduler.next_run_time() if scheduler else None,
         "schedule": {
-            "time": _config.schedule_time,
-            "timezone": _config.timezone,
-            "label": f"Daily at {_config.schedule_time} {_config.timezone}",
+            "time": cfg.schedule_time,
+            "timezone": cfg.timezone,
+            "label": f"Daily at {cfg.schedule_time} {cfg.timezone}",
         },
-        "encryption_active": _syncer._crypto.enabled if _syncer else False,
+        "encryption_active": syncer._crypto.enabled if syncer else False,
     }
 
 
 @app.get("/ssd/status")
-async def ssd_status():
-    return get_ssd_status(_config.ssd_path)
+async def ssd_status(cfg: ConfigManager = Depends(provide_config)):
+    return get_ssd_status(cfg.ssd_path)
 
 
 @app.get("/dashboard")
-async def dashboard():
-    runs = _manifest.get_runs(limit=30)
+async def dashboard(cfg: ConfigManager = Depends(provide_config),
+                    manifest: ManifestDB = Depends(get_manifest),
+                    scheduler: BackupScheduler = Depends(get_scheduler)):
+    runs = manifest.get_runs(limit=30)
     last = runs[0] if runs else None
-    ssd  = get_ssd_status(_config.ssd_path)
+    ssd  = get_ssd_status(cfg.ssd_path)
     return {
         "runs":        runs,
         "last_run":    last,
         "ssd_storage": ssd,
-        "next_run":    _scheduler.next_run_time() if _scheduler else None,
+        "next_run":    scheduler.next_run_time() if scheduler else None,
         "schedule": {
-            "time": _config.schedule_time,
-            "timezone": _config.timezone,
-            "label": f"Daily at {_config.schedule_time} {_config.timezone}",
+            "time": cfg.schedule_time,
+            "timezone": cfg.timezone,
+            "label": f"Daily at {cfg.schedule_time} {cfg.timezone}",
         },
         "active_run":  _active_run,
     }
@@ -640,94 +644,109 @@ async def run_status():
 
 
 @app.get("/runs")
-async def get_runs(limit: int = Query(default=30, ge=1, le=1000), offset: int = Query(default=0, ge=0)):
-    return _manifest.get_runs(limit=limit, offset=offset)
+async def get_runs(limit: int = Query(default=30, ge=1, le=1000), offset: int = Query(default=0, ge=0),
+                   manifest: ManifestDB = Depends(get_manifest)):
+    return manifest.get_runs(limit=limit, offset=offset)
 
 
 @app.get("/runs/{run_id}")
-async def get_run(run_id: int):
-    run = _manifest.get_run(run_id)
+async def get_run(run_id: int, manifest: ManifestDB = Depends(get_manifest)):
+    run = manifest.get_run(run_id)
     if not run:
         raise HTTPException(404, f"Run #{run_id} not found")
     return run
 
 
 @app.get("/runs/{run_id}/logs")
-async def get_run_logs(run_id: int, level: str = "ALL"):
-    return _manifest.get_logs(run_id, level=level if level != "ALL" else None)
+async def get_run_logs(run_id: int, level: str = "ALL",
+                       manifest: ManifestDB = Depends(get_manifest)):
+    return manifest.get_logs(run_id, level=level if level != "ALL" else None)
 
 
 @app.get("/runs/{run_id}/files")
-async def get_run_files(run_id: int, library: Optional[str] = None):
-    return _manifest.get_files(run_id, library=library)
+async def get_run_files(run_id: int, library: Optional[str] = None,
+                        manifest: ManifestDB = Depends(get_manifest)):
+    return manifest.get_files(run_id, library=library)
 
 
 @app.get("/config")
-async def get_config():
-    return _config.to_dict_safe()
+async def get_config(cfg: ConfigManager = Depends(provide_config)):
+    return cfg.to_dict_safe()
 
 
 @app.patch("/config")
-async def update_config(req: ConfigUpdateRequest):
+async def update_config(req: ConfigUpdateRequest,
+                        cfg: ConfigManager = Depends(provide_config),
+                        scheduler: BackupScheduler = Depends(get_scheduler),
+                        watcher: FileWatcher = Depends(get_watcher)):
     updates        = req.model_dump(exclude_none=True)
     watcher_enabled = updates.pop("watcher_enabled", None)
-    _config.update(updates)
+    cfg.update(updates)
     if "schedule_time" in updates or "timezone" in updates:
-        _scheduler.reschedule(_config.schedule_time, _config.timezone)
+        scheduler.reschedule(cfg.schedule_time, cfg.timezone)
     global _syncer
-    _syncer = LocalSyncer(_config, _manifest)
-    if watcher_enabled is True and _watcher and not _watcher.is_running:
-        _watcher.reload_sources()
-    elif watcher_enabled is False and _watcher and _watcher.is_running:
-        _watcher.stop()
-    return {"message": "Config updated", "config": _config.to_dict_safe()}
+    _syncer = LocalSyncer(cfg, _manifest)
+    if watcher_enabled is True and watcher and not watcher.is_running:
+        watcher.reload_sources()
+    elif watcher_enabled is False and watcher and watcher.is_running:
+        watcher.stop()
+    return {"message": "Config updated", "config": cfg.to_dict_safe()}
 
 
 @app.post("/config/sites")
-async def add_site(req: SiteRequest):
-    source = _config.add_site(req.model_dump(exclude_none=True))
-    if _watcher:
-        _watcher.reload_sources()
-    return {"message": "Source added", "source": source, "config": _config.to_dict_safe()}
+async def add_site(req: SiteRequest,
+                   cfg: ConfigManager = Depends(provide_config),
+                   watcher: FileWatcher = Depends(get_watcher)):
+    source = cfg.add_site(req.model_dump(exclude_none=True))
+    if watcher:
+        watcher.reload_sources()
+    return {"message": "Source added", "source": source, "config": cfg.to_dict_safe()}
 
 
 @app.post("/config/reset")
-async def reset_config():
+async def reset_config(cfg: ConfigManager = Depends(provide_config),
+                       scheduler: BackupScheduler = Depends(get_scheduler),
+                       watcher: FileWatcher = Depends(get_watcher)):
     """Reset all configuration to factory defaults."""
-    if not _config:
+    if not cfg:
         raise HTTPException(500, "Config not initialised")
-    _config.reset_to_defaults()
-    if _scheduler:
-        _scheduler.reschedule(_config.schedule_time, _config.timezone)
-    if _watcher and _watcher.is_running:
-        _watcher.stop()
-    return {"message": "Configuration reset to defaults", "config": _config.to_dict_safe()}
+    cfg.reset_to_defaults()
+    if scheduler:
+        scheduler.reschedule(cfg.schedule_time, cfg.timezone)
+    if watcher and watcher.is_running:
+        watcher.stop()
+    return {"message": "Configuration reset to defaults", "config": cfg.to_dict_safe()}
 
 
 @app.patch("/config/sites/{site_name}")
-async def update_site(site_name: str, req: SiteUpdateRequest):
+async def update_site(site_name: str, req: SiteUpdateRequest,
+                      cfg: ConfigManager = Depends(provide_config),
+                      watcher: FileWatcher = Depends(get_watcher)):
     try:
-        source = _config.update_site(site_name, req.model_dump(exclude_none=True))
+        source = cfg.update_site(site_name, req.model_dump(exclude_none=True))
     except ValueError:
         raise HTTPException(404, f"Source '{site_name}' not found")
-    if _watcher:
-        _watcher.reload_sources()
+    if watcher:
+        watcher.reload_sources()
     return {"message": "Source updated", "source": source}
 
 
 @app.delete("/config/sites/{site_name}")
-async def remove_site(site_name: str):
-    removed = _config.remove_site(site_name)
+async def remove_site(site_name: str,
+                      cfg: ConfigManager = Depends(provide_config),
+                      watcher: FileWatcher = Depends(get_watcher)):
+    removed = cfg.remove_site(site_name)
     if not removed:
         raise HTTPException(404, f"Source '{site_name}' not found")
-    if _watcher:
-        _watcher.reload_sources()
-    return {"message": "Source removed", "config": _config.to_dict_safe()}
+    if watcher:
+        watcher.reload_sources()
+    return {"message": "Source removed", "config": cfg.to_dict_safe()}
 
 
 @app.get("/config/audit")
-async def get_config_audit(limit: int = Query(default=100, ge=1, le=1000)):
-    return _manifest.get_config_audit(limit=limit)
+async def get_config_audit(limit: int = Query(default=100, ge=1, le=1000),
+                           manifest: ManifestDB = Depends(get_manifest)):
+    return manifest.get_config_audit(limit=limit)
 
 
 @app.post("/restore")
@@ -824,8 +843,9 @@ async def _do_verify(source_label: Optional[str] = None, syncer: LocalSyncer = N
 
 
 @app.patch("/settings/smtp")
-async def update_smtp(req: SmtpUpdateRequest):
-    _config.update_smtp(req.model_dump(exclude_none=True))
+async def update_smtp(req: SmtpUpdateRequest,
+                      cfg: ConfigManager = Depends(provide_config)):
+    cfg.update_smtp(req.model_dump(exclude_none=True))
     return {"message": "SMTP settings updated"}
 
 
@@ -840,34 +860,38 @@ async def test_smtp(request: Request, reporter: Reporter = Depends(get_reporter)
 
 
 @app.patch("/settings/retention")
-async def update_retention(req: RetentionUpdateRequest):
+async def update_retention(req: RetentionUpdateRequest,
+                           cfg: ConfigManager = Depends(provide_config)):
     try:
-        _config.update_retention(req.model_dump())
+        cfg.update_retention(req.model_dump())
         return {"message": "Retention policy updated"}
     except ValueError as e:
         raise HTTPException(400, str(e))
 
 
 @app.post("/settings/prune")
-async def run_prune(background_tasks: BackgroundTasks):
+async def run_prune(background_tasks: BackgroundTasks,
+                    cfg: ConfigManager = Depends(provide_config),
+                    syncer: LocalSyncer = Depends(get_syncer),
+                    reporter: Reporter = Depends(get_reporter)):
     if _active_run and _active_run.get("status") == "running":
         raise HTTPException(409, "Cannot prune while a backup is running")
-    background_tasks.add_task(_do_prune)
+    background_tasks.add_task(_do_prune, cfg, syncer, reporter)
     return {"message": "Prune job started"}
 
 
-async def _do_prune():
+async def _do_prune(cfg: ConfigManager, syncer: LocalSyncer, reporter: Reporter):
     loop   = asyncio.get_running_loop()
     pruned = await loop.run_in_executor(
         None,
-        lambda: _syncer.prune_old_backups(
-            _config.retention_daily_days,
-            _config.retention_weekly_days,
-            _config.retention_guard_days,
+        lambda: syncer.prune_old_backups(
+            cfg.retention_daily_days,
+            cfg.retention_weekly_days,
+            cfg.retention_guard_days,
         ),
     )
     logger.info(f"Prune complete — {pruned} files removed")
-    _reporter.alerts.add(
+    reporter.alerts.add(
         "info", "Prune complete",
         f"{pruned} old backup files removed from SSD.",
     )
@@ -889,55 +913,57 @@ async def generate_encryption_key(request: Request, cfg: ConfigManager = Depends
 
 
 @app.get("/watcher/status")
-async def watcher_status():
-    if not _watcher:
+async def watcher_status(watcher: FileWatcher = Depends(get_watcher)):
+    if not watcher:
         return {"running": False, "sources": [], "error": "Watcher not initialised"}
-    return _watcher.status()
+    return watcher.status()
 
 
 @app.post("/watcher/start")
-async def watcher_start():
-    if not _watcher:
+async def watcher_start(cfg: ConfigManager = Depends(provide_config),
+                        watcher: FileWatcher = Depends(get_watcher)):
+    if not watcher:
         raise HTTPException(503, "Watcher not initialised")
-    if _watcher.is_running:
-        return {"message": "Watcher already running", **_watcher.status()}
-    if not _config.get_enabled_sources():
+    if watcher.is_running:
+        return {"message": "Watcher already running", **watcher.status()}
+    if not cfg.get_enabled_sources():
         raise HTTPException(
             400, "No enabled source folders — add at least one source first"
         )
-    _watcher.reload_sources()
-    return {"message": "Watcher started", **_watcher.status()}
+    watcher.reload_sources()
+    return {"message": "Watcher started", **watcher.status()}
 
 
 @app.post("/watcher/stop")
-async def watcher_stop():
-    if not _watcher:
+async def watcher_stop(watcher: FileWatcher = Depends(get_watcher)):
+    if not watcher:
         raise HTTPException(503, "Watcher not initialised")
-    if not _watcher.is_running:
+    if not watcher.is_running:
         return {"message": "Watcher is not running"}
-    _watcher.stop()
+    watcher.stop()
     return {"message": "Watcher stopped"}
 
 
 @app.get("/alerts")
-async def get_alerts(include_dismissed: bool = False):
+async def get_alerts(include_dismissed: bool = False,
+                     reporter: Reporter = Depends(get_reporter)):
     return {
-        "alerts":       _reporter.alerts.get_all(include_dismissed=include_dismissed),
-        "unread_count": _reporter.alerts.unread_count(),
+        "alerts":       reporter.alerts.get_all(include_dismissed=include_dismissed),
+        "unread_count": reporter.alerts.unread_count(),
     }
 
 
 @app.post("/alerts/{alert_id}/dismiss")
-async def dismiss_alert(alert_id: int):
-    ok = _reporter.alerts.dismiss(alert_id)
+async def dismiss_alert(alert_id: int, reporter: Reporter = Depends(get_reporter)):
+    ok = reporter.alerts.dismiss(alert_id)
     if not ok:
         raise HTTPException(404, f"Alert #{alert_id} not found")
-    return {"dismissed": alert_id, "unread_count": _reporter.alerts.unread_count()}
+    return {"dismissed": alert_id, "unread_count": reporter.alerts.unread_count()}
 
 
 @app.post("/alerts/dismiss-all")
-async def dismiss_all_alerts():
-    count = _reporter.alerts.dismiss_all()
+async def dismiss_all_alerts(reporter: Reporter = Depends(get_reporter)):
+    count = reporter.alerts.dismiss_all()
     return {"dismissed": count, "unread_count": 0}
 
 
