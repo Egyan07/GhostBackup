@@ -9,9 +9,9 @@
 
 **Author: [Egyan07](https://github.com/Egyan07)**
 
-GhostBackup is a secure automated backup system built with **Electron, React, and Python FastAPI**. Originally built for and deployed at Red Parrot Accounting (UK). Designed for small businesses requiring **encrypted local backups, long-term retention, and automated monitoring** without cloud dependency.
+GhostBackup is a secure automated backup system built with **Electron, React, and Python FastAPI**. Originally built for and actively deployed at Red Parrot Accounting (UK) — open source and free for any small business to use.
 
-> **Platform:** Windows only. Linux/macOS support is partial and untested.
+> **Platform:** Windows (fully supported). macOS and Linux are not officially supported — the app may not install or run correctly on those platforms.
 
 ---
 
@@ -309,20 +309,24 @@ GhostBackup/
 ## 🛠 Troubleshooting
 
 **Q: I get "port already in use" every time I open the app.**
-A: You closed the app with the X button, which hides it to tray — it was still running in the background. Always quit via File → Exit or right-click the tray icon → Quit GhostBackup. This fully exits and releases port 8765.
+
+**A:** You closed the app with the X button, which hides it to tray — it was still running in the background. Always quit via File → Exit or right-click the tray icon → Quit GhostBackup. This fully exits and releases port 8765.
 
 **Q: The splash screen shows "backup service stopped unexpectedly (exit code 1)".**
-A: Your Python dependencies are out of sync. Run:
+
+**A:** Your Python dependencies are out of sync. Run:
 ```
 pip install -r backend/requirements.txt
 ```
 Then relaunch via `start.bat`.
 
 **Q: Email alerts aren't arriving.**
-A: Make sure you're using a Gmail App Password, not your regular Gmail password. Generate one at `https://myaccount.google.com/apppasswords`. In Settings, set SMTP host to `smtp.gmail.com`, port `587`, enter your Gmail address in both From and Recipients, save — then click Send Test Email to verify.
+
+**A:** Make sure you're using a Gmail App Password, not your regular Gmail password. Generate one at `https://myaccount.google.com/apppasswords`. In Settings, set SMTP host to `smtp.gmail.com`, port `587`, enter your Gmail address in both From and Recipients, save — then click Send Test Email to verify.
 
 **Q: The backup isn't running at the scheduled time.**
-A: Check the green dot in the sidebar — if it's grey or red, the scheduler isn't running (restart the app). Also verify `schedule.time` and `schedule.timezone` in `config.yaml` are correct for your timezone.
+
+**A:** Check the green dot in the sidebar — if it's grey or red, the scheduler isn't running (restart the app). Also verify `schedule.time` and `schedule.timezone` in `config.yaml` are correct for your timezone.
 
 ---
 
