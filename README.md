@@ -13,6 +13,8 @@
 
 **Author: [Egyan07](https://github.com/Egyan07)**
 
+> 💡 Most small businesses back up to Dropbox or OneDrive and call it a day. But when your files contain client financials, legal documents, or personal records — you don't want them on someone else's server. GhostBackup keeps your backups local, encrypted, and under your control. No monthly bill. No breach notification letters.
+
 GhostBackup is a secure automated backup system built with **Electron, React, and Python FastAPI**. Originally built for and actively deployed at Red Parrot Accounting (UK) — open source and free for any small business with similar needs.
 
 ---
