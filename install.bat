@@ -70,7 +70,7 @@ if errorlevel 1 (
 
 REM ── Step 3: Node packages ─────────────────────────────────────────────────
 echo  [3/4] Installing Node packages...
-call npm ci --silent
+call npm install --legacy-peer-deps --silent
 if errorlevel 1 (
     echo  [ERROR] npm install failed. Check your internet connection and try again.
     pause & exit /b 1
