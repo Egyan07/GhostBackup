@@ -108,6 +108,9 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | 📚 Audit Trail | Every configuration change is logged with UTC timestamp and hostname. Full backup history with per-file status stored in SQLite. Config updates surface unknown/ignored keys in the API response. |
 | 📧 Email Alerts | SMTP-based failure alerts and run summaries. Supports Gmail App Passwords and standard SMTP providers. |
 | 🔢 Config Validation | All writable config fields validated on update — schedule time (HH:MM), IANA timezone, numeric ranges, type checks. Invalid values return HTTP 400 before any write. |
+| 🔔 Desktop Notifications | Windows toast notification on backup completion for all outcomes — success, partial, and failed. Joins existing SMTP alerts for full run visibility. |
+| 🌗 Dark/Light Theme | Toggle between dark (default) and light themes via the ☀️/🌙 button in the topbar. Choice persists across sessions via localStorage. |
+| 📤 Audit Log Export | Export full run history as a downloadable CSV from the Logs page. Backend `GET /runs/export` endpoint returns up to 10,000 runs. |
 
 ---
 
