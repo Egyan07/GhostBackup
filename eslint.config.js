@@ -1,6 +1,7 @@
 const js = require("@eslint/js");
 
 module.exports = [
+  { ignores: ["src/coverage/**"] },
   js.configs.recommended,
   {
     files: ["src/**/*.{js,jsx}"],
