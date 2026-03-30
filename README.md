@@ -2,7 +2,7 @@
 
 > ⚠️ **Windows Only** — macOS and Linux are not supported. The app may not install or run correctly on those platforms.
 
-### Automated Backup with Encryption & Audit Logging
+### Local. Encrypted. Audited. Yours.
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
 ![Backend Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)
@@ -21,8 +21,30 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 
 ---
 
+## ⚔️ How GhostBackup Compares
+
+| Feature | GhostBackup | Backblaze B2 | Veeam Free | Robocopy |
+|---------|:-----------:|:------------:|:----------:|:--------:|
+| AES-256-GCM encryption | ✅ | ✅ | ❌ | ❌ |
+| No cloud / no vendor dependency | ✅ | ❌ | ✅ | ✅ |
+| No subscription cost | ✅ | ❌ | ✅ | ✅ |
+| GUI dashboard + live run view | ✅ | ❌ | ✅ | ❌ |
+| Per-file integrity verification (xxhash) | ✅ | ❌ | ❌ | ❌ |
+| Email alerts on failure | ✅ | ✅ | ✅ | ❌ |
+| Dry-run restore preview | ✅ | ❌ | ❌ | ❌ |
+| Audit log with run history | ✅ | ❌ | ✅ | ❌ |
+| Key fingerprint rotation detection | ✅ | ❌ | ❌ | ❌ |
+| Open source | ✅ | ❌ | ❌ | ✅ |
+| Windows native | ✅ | ✅ | ✅ | ✅ |
+| Rate-limited REST API | ✅ | — | ❌ | ❌ |
+
+> GhostBackup is purpose-built for small businesses that need real encryption, real audit trails, and zero recurring cost — without the complexity of enterprise backup suites.
+
+---
+
 ## 📑 Table of Contents
 
+- [How GhostBackup Compares](#️-how-ghostbackup-compares)
 - [Screenshots](#-screenshots)
 - [Tech Stack](#-tech-stack)
 - [Features](#-features)
@@ -169,7 +191,7 @@ npm test
 | Suite | Tests | Coverage | Type | CI |
 |-------|-------|----------|------|----|
 | Backend | 338 | 90% line | Unit + integration | ✅ GitHub Actions |
-| Frontend | 60 | — | Unit (Vitest) | ✅ GitHub Actions |
+| Frontend | 134 | — | Unit (Vitest) | ✅ GitHub Actions |
 
 **What's tested:**
 - Backup engine (scan, encrypt, copy, verify, prune)
