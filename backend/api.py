@@ -8,8 +8,10 @@ variable at startup.
 """
 
 import asyncio
+import csv
 import hmac
 import http.client
+import io
 import json
 import logging
 import os
@@ -727,6 +729,24 @@ async def get_run(run_id: int, manifest: ManifestDB = Depends(get_manifest)):
     if not run:
         raise HTTPException(404, f"Run #{run_id} not found")
     return run
+
+
+@app.get("/runs/export")
+async def export_runs_csv(limit: int = Query(default=1000, ge=1, le=10000),
+                          manifest: ManifestDB = Depends(get_manifest)):
+    runs = manifest.get_runs(limit=limit, offset=0)
+    buf = io.StringIO()
+    fields = ["run_id", "started_at", "finished_at", "status", "files_transferred",
+              "files_failed", "files_skipped", "bytes_transferred", "duration_seconds"]
+    writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    for r in runs:
+        writer.writerow({k: r.get(k, "") for k in fields})
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=ghostbackup_runs.csv"},
+    )
 
 
 @app.get("/runs/{run_id}/logs")

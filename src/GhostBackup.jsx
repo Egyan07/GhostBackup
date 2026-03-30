@@ -51,6 +51,12 @@ export default function App() {
   const [clock,  setClock]  = useState("");
   const [appVersion, setAppVersion] = useState("v2.0.0");
   const [appAuthor,  setAppAuthor]  = useState("");
+  const [theme, setTheme] = useState(() => localStorage.getItem("gb-theme") || "dark");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("gb-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     window.ghostbackup?.version?.().then(v => { if (v) setAppVersion("v" + v); });
@@ -132,6 +138,12 @@ export default function App() {
             <div className="meta-badge">
               Next run: {formatNextRun(health)}
             </div>
+            <button
+              className="btn btn-sm"
+              onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
+              title="Toggle theme"
+              style={{ fontSize: 16, padding: "4px 8px" }}
+            >{theme === "dark" ? "☀️" : "🌙"}</button>
             <AlertBell />
           </div>
         </div>

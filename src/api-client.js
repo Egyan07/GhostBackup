@@ -129,6 +129,19 @@ export const api = {
 
   // Run history
   getRuns:         (limit)       => request("GET",    "/runs", null, limit ? { limit } : null),
+  exportRunsCsv:   async ()      => {
+    const [token, baseUrl] = await Promise.all([_getToken(), _getBaseUrl()]);
+    const res = await fetch(baseUrl + "/runs/export?limit=10000", {
+      headers: { "X-API-Key": token },
+    });
+    if (!res.ok) throw new ApiError(res.status, res.statusText);
+    const text = await res.text();
+    const blob = new Blob([text], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "ghostbackup_runs.csv"; a.click();
+    URL.revokeObjectURL(url);
+  },
   getRun:          (id)          => request("GET",    `/runs/${id}`),
   getRunLogs:      (id, level)   => request("GET",    `/runs/${id}/logs`, null, level ? { level } : null),
 
