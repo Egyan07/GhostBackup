@@ -15,6 +15,8 @@
 
 > 💡 Most small businesses back up to Dropbox or OneDrive and call it a day. But when your files contain client financials, legal documents, or personal records — you don't want them on someone else's server. GhostBackup keeps your backups local, encrypted, and under your control. No monthly bill. No breach notification letters.
 
+---
+
 GhostBackup is a secure automated backup system built with **Electron, React, and Python FastAPI**. Originally built for and actively deployed at Red Parrot Accounting (UK) — open source and free for any small business with similar needs.
 
 ---
@@ -38,7 +40,7 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | Key fingerprint rotation detection | ✅ | ❌ | ❌ | ❌ |
 | Open source | ✅ | ❌ | ❌ | ✅ |
 | Windows native | ✅ | ✅ | ✅ | ✅ |
-| Rate-limited REST API | ✅ | — | ❌ | ❌ |
+| Rate-limited REST API | ✅ | N/A | ❌ | ❌ |
 
 > GhostBackup is purpose-built for small businesses that need real encryption, real audit trails, and zero recurring cost — without the complexity of enterprise backup suites.
 
@@ -409,7 +411,7 @@ GhostBackup/
 │   ├── splash.css           ← splash/loading screen styles
 │   ├── components/          ← reusable UI components
 │   ├── pages/               ← full-page views (Dashboard, Restore, Settings, etc.)
-│   └── tests/               ← 60 vitest tests
+│   └── tests/               ← 134 vitest tests
 │
 ├── screenshots/             ← README screenshots
 ├── SETUP.md                 ← full setup guide
