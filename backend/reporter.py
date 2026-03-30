@@ -212,6 +212,11 @@ class Reporter:
                 f"{run_state.get('files_transferred', 0)} files transferred.",
                 run_id=run_id,
             )
+            if self._notify_cb:
+                await self._notify_cb(
+                    f"GhostBackup — Run #{run_id} complete",
+                    f"{run_state.get('files_transferred', 0)} files transferred successfully.",
+                )
 
         if not self._config.smtp_recipients:
             return
