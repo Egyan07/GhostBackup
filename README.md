@@ -541,7 +541,7 @@ Then relaunch via `start.bat`.
 ```bash
 git pull
 pip install -r backend/requirements.txt
-npm install
+npm install --legacy-peer-deps
 ```
 Your `config.yaml` and `.env.local` will not be overwritten.
 
