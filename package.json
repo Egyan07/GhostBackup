@@ -1,6 +1,6 @@
 {
   "name": "ghostbackup",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "description": "SharePoint daily auto-backup system for Red Parrot Accounting",
   "author": "Egyan07",
   "private": true,
@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "lint": "eslint src",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "@testing-library/react": "15.0.7",
     "@testing-library/user-event": "14.5.2",
     "@vitejs/plugin-react": "4.3.1",
+    "@vitest/coverage-v8": "^1.6.1",
     "concurrently": "9.0.1",
     "electron": "33.3.1",
     "electron-builder": "26.8.1",

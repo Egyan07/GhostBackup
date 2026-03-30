@@ -190,12 +190,15 @@ python -m pytest tests/ -v --cov=. --cov-report=term-missing
 
 # Frontend — 134 tests
 npm test
+
+# Frontend — with coverage
+npm run test:coverage
 ```
 
 | Suite | Tests | Coverage | Type | CI |
 |-------|-------|----------|------|----|
 | Backend | 338 | 90% line | Unit + integration | ✅ GitHub Actions |
-| Frontend | 134 | — | Unit (Vitest) | ✅ GitHub Actions |
+| Frontend | 134 | 63% stmt | Unit (Vitest + v8) | ✅ GitHub Actions |
 
 **What's tested:**
 - Backup engine (scan, encrypt, copy, verify, prune)

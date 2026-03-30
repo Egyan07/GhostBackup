@@ -27,6 +27,7 @@ module.exports = [
         URL: "readonly",
         navigator: "readonly",
         confirm: "readonly",
+        localStorage: "readonly",
       },
     },
     rules: {

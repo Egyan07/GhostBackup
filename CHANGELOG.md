@@ -4,6 +4,25 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v2.9.0 — Desktop Notifications, CSV Audit Log, Dark/Light Theme & CI Coverage
+
+### Notifications
+- **Desktop toast on backup completion** (`reporter.py`): success runs now fire a Windows desktop notification via the Electron notify server — all three outcomes (success, partial, failed) now show a toast
+
+### Frontend
+- **Dark/light theme toggle** (`GhostBackup.jsx`, `styles.css`): ☀️/🌙 button in the topbar; choice persists via `localStorage`
+- **Export audit log as CSV** (`api.py`, `api-client.js`, `LogsViewer.jsx`): `GET /runs/export` endpoint returns all run history as a downloadable CSV; Export CSV button added to the Logs page Run History panel
+- **ESLint globals fix** (`eslint.config.js`): added `localStorage` to browser globals
+
+### CI / Tooling
+- **Frontend coverage** (`vite.config.js`, `package.json`, `ci.yml`): `npm run test:coverage` generates v8 coverage report; CI runs coverage on Node 20 — baseline **62.54%** statements
+- `@vitest/coverage-v8@1.6.1` added as dev dependency
+
+### Testing
+- **338 backend + 134 frontend = 472 tests**, all passing
+
+---
+
 ## v2.8.0 — Dashboard & Restore Frontend Tests
 
 ### Testing
