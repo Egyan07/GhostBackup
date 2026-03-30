@@ -1,6 +1,6 @@
 {
   "name": "ghostbackup",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "SharePoint daily auto-backup system for Red Parrot Accounting",
   "author": "Egyan07",
   "private": true,
@@ -89,5 +89,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "GhostBackup"
     }
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.60.1"
   }
 }

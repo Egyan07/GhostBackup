@@ -4,6 +4,16 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v2.8.0 — Dashboard & Restore Frontend Tests
+
+### Testing
+- **`dashboard.test.jsx`** (35 tests): loading state, error state, stat strip, active run banner, run history/heatmap, next scheduled run countdown, SSD storage, folder status table, auto-refresh interval
+- **`restore.test.jsx`** (31 tests): loading state, error state, run list (failed run filtering), library selection, destination path, dry-run toggle, restore button, restore result panel, warning banner
+- Frontend total: **60 → 134 tests** across 6 test files, all passing
+- **Total: 338 backend + 134 frontend = 472 tests passing**
+
+---
+
 ## v2.7.0 — WAL Checkpoint, Key Fingerprint Tracking & Backup Job Integration Tests
 
 ### Reliability
