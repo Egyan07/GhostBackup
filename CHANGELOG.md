@@ -4,6 +4,29 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v2.9.1 — Security Hardening & Code Review Fixes
+
+### Security
+- **Encryption fail-hard mode** (`syncer.py`): if encryption is enabled in config but the key is missing or initialisation fails, the app now **refuses to start** instead of silently running unencrypted. Critical for accounting firms handling sensitive data.
+- **Key fingerprint no longer accesses private API** (`syncer.py`): `key_fingerprint` now uses the stored derived key bytes instead of reaching into `AESGCM._key` — immune to `cryptography` library upgrades breaking key rotation detection.
+- **SSD path validation** (`config.py`): `ssd_path` and `secondary_ssd_path` now reject null bytes and URLs, preventing path injection via the config API.
+
+### Reliability
+- **Manifest DB rotation** (`api.py`): after every backup run, the manifest database is now backed up with a timestamped filename. The 3 most recent copies are kept — protects against corruption overwriting the only backup copy.
+- **Notification server port conflict resolution** (`electron/main.js`): port 8766 now runs through the same `killPortConflict()` check as the API port (8765), preventing silent notification failure.
+- **Thread-safe run status reads** (`api.py`): `/run/status` and `/dashboard` now return snapshot copies of `_active_run` under the run mutex, preventing partial reads from the thread pool.
+
+### Frontend
+- **Verify endpoint returns results** (`api.py`, `Settings.jsx`): the `/verify` endpoint is now synchronous — the UI correctly displays verified/corrupt/missing counts instead of showing all zeros.
+- **Expanded timezone dropdown** (`BackupConfig.jsx`): timezone selector expanded from 3 to 13 options covering UK, Europe, Americas, and Asia-Pacific.
+
+### Fixes
+- **Version sync**: `api.py` now correctly reports v2.9.1 (was stuck on 2.8.0)
+- **`.gitignore` fix**: split concatenated `start.batsrc/coverage/` into two proper entries
+- **`_record_file_count`** (`manifest.py`): moved from class variable to instance variable for correctness
+
+---
+
 ## v2.9.0 — Desktop Notifications, CSV Audit Log, Dark/Light Theme & CI Coverage
 
 ### Notifications

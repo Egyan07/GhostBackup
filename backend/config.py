@@ -360,6 +360,13 @@ class ConfigManager:
 
     def _validate_update(self, updates: dict) -> None:
         """Raise ValueError if any value in a flat update dict is out of range or invalid."""
+        for path_key in ("ssd_path", "secondary_ssd_path"):
+            if path_key in updates:
+                v = updates[path_key]
+                if not isinstance(v, str):
+                    raise ValueError(f"{path_key} must be a string")
+                if v and ("\x00" in v or v.startswith("http://") or v.startswith("https://")):
+                    raise ValueError(f"{path_key} must be a local filesystem path, not a URL")
         if "schedule_time" in updates:
             if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(updates["schedule_time"])):
                 raise ValueError("schedule_time must be HH:MM (00:00–23:59)")

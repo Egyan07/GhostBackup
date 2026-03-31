@@ -27,18 +27,18 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 
 ## ⚔️ How GhostBackup Compares
 
-| Feature | GhostBackup | Backblaze B2 | Veeam Free | Robocopy |
-|---------|:-----------:|:------------:|:----------:|:--------:|
-| AES-256-GCM encryption | ✅ | ✅ | ❌ | ❌ |
-| No cloud / no vendor dependency | ✅ | ❌ | ✅ | ✅ |
-| No subscription cost | ✅ | ❌ | ✅ | ✅ |
-| GUI dashboard + live run view | ✅ | ❌ | ✅ | ❌ |
+| Feature | GhostBackup | Backblaze B2 | Veeam Free | IDrive |
+|---------|:-----------:|:------------:|:----------:|:------:|
+| AES-256-GCM encryption | ✅ | ✅ | ❌ | ✅ |
+| No cloud / no vendor dependency | ✅ | ❌ | ✅ | ❌ |
+| No subscription cost | ✅ | ❌ | ✅ | ❌ |
+| GUI dashboard + live run view | ✅ | ❌ | ✅ | ✅ |
 | Per-file integrity verification (xxhash) | ✅ | ❌ | ❌ | ❌ |
-| Email alerts on failure | ✅ | ✅ | ✅ | ❌ |
+| Email alerts on failure | ✅ | ✅ | ✅ | ✅ |
 | Dry-run restore preview | ✅ | ❌ | ❌ | ❌ |
-| Audit log with run history | ✅ | ❌ | ✅ | ❌ |
+| Audit log with run history | ✅ | ❌ | ✅ | ✅ |
 | Key fingerprint rotation detection | ✅ | ❌ | ❌ | ❌ |
-| Open source | ✅ | ❌ | ❌ | ✅ |
+| Open source | ✅ | ❌ | ❌ | ❌ |
 | Windows native | ✅ | ✅ | ✅ | ✅ |
 | Rate-limited REST API | ✅ | N/A | ❌ | ❌ |
 
@@ -104,7 +104,7 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | ⏰ Scheduled Backups | Daily automated backups via APScheduler with configurable time and timezone. |
 | 👁️ Real-Time File Watching | Watchdog-based file system monitor. Detects changes and triggers incremental backup (15s debounce, 120s cooldown between triggers). Orphaned temp files from interrupted runs are cleaned up on startup. |
 | 🛑 Failure Threshold Abort | If more than 5% of files fail during a library run (minimum 3 failures), that library is aborted. Other libraries continue. Threshold is configurable. |
-| ✅ Integrity Verification | `/verify` endpoint re-hashes every backed-up file using xxhash and compares against stored checksums. |
+| ✅ Integrity Verification | `/verify` endpoint re-hashes every backed-up file using xxhash and compares against stored checksums. Returns verified/corrupt/missing counts directly to the UI. |
 | 📚 Audit Trail | Every configuration change is logged with UTC timestamp and hostname. Full backup history with per-file status stored in SQLite. Config updates surface unknown/ignored keys in the API response. |
 | 📧 Email Alerts | SMTP-based failure alerts and run summaries. Supports Gmail App Passwords and standard SMTP providers. |
 | 🔢 Config Validation | All writable config fields validated on update — schedule time (HH:MM), IANA timezone, numeric ranges, type checks. Invalid values return HTTP 400 before any write. |
@@ -280,7 +280,7 @@ All endpoints require the **X-API-Key header** except `/health`.
 | POST | /run/start | Start a backup run |
 | POST | /run/stop | Cancel the active run |
 | GET | /run/status | Active run state |
-| POST | /verify | Re-hash all backed-up files and report mismatches |
+| POST | /verify | Re-hash all backed-up files and return verified/corrupt/missing counts |
 | GET | /runs | Backup run history |
 | GET | /runs/:id | Single run detail |
 | GET | /runs/:id/logs | Per-file log entries for a run |
@@ -430,14 +430,14 @@ GhostBackup/
 
 | Layer | Implementation |
 |-------|----------------|
-| Encryption | AES-256-GCM via Python `cryptography` library. Streaming with constant memory. Per-file random nonce (`os.urandom`). Versioned header (v1) for key rotation support. Per-installation HKDF salt generated at setup for stronger key derivation isolation. |
+| Encryption | AES-256-GCM via Python `cryptography` library. Streaming with constant memory. Per-file random nonce (`os.urandom`). Versioned header (v1) for key rotation support. Per-installation HKDF salt generated at setup for stronger key derivation isolation. **Fail-hard mode:** if encryption is enabled but key is missing or broken, the app refuses to start — no silent fallback to unencrypted backups. |
 | API Authentication | Session token via `crypto.randomBytes(32)` per launch. Validated with `hmac.compare_digest` (timing-safe). Rate limiting on sensitive endpoints (slowapi). |
 | Path Safety | Restore endpoint validates all paths against traversal attacks before any file operation. |
 | Electron Sandbox | Chromium sandbox enabled. CSP enforced in both dev and production builds. |
 | Credential Storage | Secrets in `.env.local` with input sanitization on writes. Excluded from version control. |
-| Database Integrity | SQLite with `PRAGMA synchronous=FULL`. File records committed every 100 inserts during a run — crash data loss limited to at most 100 files. WAL checkpoint after every run prevents unbounded WAL growth. Schema versioned with incremental delta migrations. |
+| Database Integrity | SQLite with `PRAGMA synchronous=FULL`. File records committed every 100 inserts during a run — crash data loss limited to at most 100 files. WAL checkpoint after every run prevents unbounded WAL growth. Schema versioned with incremental delta migrations. Manifest DB backed up to SSD with 3-copy rotation after every run. |
 | Key Rotation Safety | Each backed-up file stores a SHA-256 fingerprint of the encryption key used. On restore, a fingerprint mismatch triggers a warning — detects silent restore failures after key rotation. |
-| Process Safety | Before killing a conflicting process on port 8765, GhostBackup verifies it's a Python/GhostBackup process. Will not kill unrelated processes. |
+| Process Safety | Before killing a conflicting process on ports 8765 (API) and 8766 (notifications), GhostBackup verifies it's a Python/GhostBackup process. Will not kill unrelated processes. |
 | Data Integrity | xxhash checksum computed at source, verified after every copy to primary and secondary drives. |
 | Failure Protection | Configurable failure threshold (default 5%, min 3 files). If exceeded per library, that library aborts. |
 
@@ -471,7 +471,7 @@ Open a GitHub issue or contact the author directly. Do not include exploit detai
 | Configuration audit trail | Every config change logged with timestamp, hostname, and previous value |
 | Backup run history | Every run recorded with start/end time, file count, success/failure counts |
 | Per-file records | Each file's hash, size, status, and any error message stored in SQLite |
-| Integrity verification | `/verify` endpoint re-hashes all backup files and reports any mismatches |
+| Integrity verification | `/verify` endpoint re-hashes all backup files and returns verified/corrupt/missing counts to the UI |
 
 **Your Responsibilities**
 - **GDPR:** If backing up personal data, conduct your own data protection impact assessment. Consider how right-to-erasure requests interact with long-term retention.

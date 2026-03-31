@@ -53,6 +53,8 @@ After setup completes, the installer prints your encryption key on screen. **Cop
 
 > If this key is lost, your backups cannot be decrypted. There is no recovery option.
 
+> **Important:** GhostBackup will **refuse to start** if encryption is enabled (the default) but the key is missing or invalid. This is intentional — it prevents accidental unencrypted backups of sensitive data. If you see a startup error about encryption, verify that `GHOSTBACKUP_ENCRYPTION_KEY` is set correctly in `.env.local`.
+
 ### Step 4 — Configure email alerts (optional)
 
 Open `backend\config\config.yaml` and fill in the `smtp` block:

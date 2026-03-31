@@ -146,9 +146,10 @@ def test_prune_calls_mark_run_pruned_when_files_deleted(tmp_path):
 
     cfg = MagicMock()
     cfg.get_enabled_sources.return_value = [{"label": "Accounts"}]
-    cfg.secondary_ssd_path = ""
-    cfg.encryption_key     = None
-    cfg.encryption_enabled = False
+    cfg.secondary_ssd_path    = ""
+    cfg.encryption_key        = None
+    cfg.encryption_enabled    = False
+    cfg.encryption_config_enabled = False
 
     manifest = MagicMock()
     manifest.get_backup_files_for_prune.return_value = [{
@@ -175,9 +176,10 @@ def test_prune_does_not_mark_pruned_when_nothing_deleted(tmp_path):
 
     cfg = MagicMock()
     cfg.get_enabled_sources.return_value = [{"label": "Accounts"}]
-    cfg.secondary_ssd_path = ""
-    cfg.encryption_key     = None
-    cfg.encryption_enabled = False
+    cfg.secondary_ssd_path    = ""
+    cfg.encryption_key        = None
+    cfg.encryption_enabled    = False
+    cfg.encryption_config_enabled = False
 
     manifest = MagicMock()
     # Return a file that doesn't exist on disk — nothing deleted
@@ -197,24 +199,22 @@ def test_prune_does_not_mark_pruned_when_nothing_deleted(tmp_path):
 #   Regression — fix #8: encryption warning is reachable
 # =============================================================================
 
-def test_encryption_warning_fires_when_key_missing(caplog):
+def test_encryption_required_raises_when_key_missing():
     """
-    Regression: warning must fire when encryption is enabled in config
-    but GHOSTBACKUP_ENCRYPTION_KEY is not set.
-    Previously the condition was unreachable.
+    Regression: LocalSyncer must refuse to start when encryption is enabled
+    in config but GHOSTBACKUP_ENCRYPTION_KEY is not set.
+    Previously it would silently fall back to unencrypted backups.
     """
-    import logging
+    import pytest
     from unittest.mock import MagicMock
     from syncer import LocalSyncer
 
     cfg = MagicMock()
-    cfg.encryption_key     = None          # key not set
-    cfg._data              = {"encryption": {"enabled": True}}
-    cfg.secondary_ssd_path = ""
+    cfg.encryption_key            = None          # key not set
+    cfg.encryption_config_enabled = True          # encryption required
+    cfg.secondary_ssd_path        = ""
 
     manifest = MagicMock()
 
-    with caplog.at_level(logging.WARNING, logger="syncer"):
+    with pytest.raises(RuntimeError, match="Encryption is required"):
         LocalSyncer(config=cfg, manifest=manifest)
-
-    assert any("UNENCRYPTED" in r.message for r in caplog.records)

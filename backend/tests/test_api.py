@@ -394,7 +394,10 @@ class TestVerify:
         client._api._active_run = None
         r = client.post("/verify")
         assert r.status_code == 200
-        assert "started" in r.json()["message"].lower()
+        data = r.json()
+        assert "verified" in data
+        assert "failed" in data
+        assert "missing" in data
 
 
 # ── /watcher ───────────────────────────────────────────────────────────────────
@@ -616,4 +619,5 @@ class TestVerifyEndpoint:
         r = client.post("/verify")
         assert r.status_code == 200
         data = r.json()
-        assert "message" in data
+        assert "verified" in data
+        assert "source" in data

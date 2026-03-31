@@ -186,7 +186,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="2.8.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="2.9.1", lifespan=lifespan)
 
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
@@ -621,16 +621,30 @@ async def _backup_manifest_to_ssd(
     cfg: "ConfigManager" = None,
     manifest: "ManifestDB" = None,
 ) -> None:
-    """Copy the manifest database to the SSD after every successful run."""
+    """Copy the manifest database to the SSD after every successful run.
+
+    Keeps the 3 most recent copies with timestamps to protect against
+    corruption overwriting the only backup.
+    """
     cfg      = cfg      or _config
     manifest = manifest or _manifest
     if not cfg.ssd_path:
         return
     try:
-        db_dest = Path(cfg.ssd_path) / ".ghostbackup" / "ghostbackup.db"
-        db_dest.parent.mkdir(parents=True, exist_ok=True)
+        dest_dir = Path(cfg.ssd_path) / ".ghostbackup"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        # Timestamped copy for rotation
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        db_dest = dest_dir / f"ghostbackup_{ts}.db"
         shutil.copy2(str(manifest.db_path), str(db_dest))
-        logger.info(f"Manifest DB backed up to SSD: {db_dest}")
+        # Also keep a latest symlink / copy for easy access
+        latest = dest_dir / "ghostbackup.db"
+        shutil.copy2(str(manifest.db_path), str(latest))
+        # Prune old copies — keep only the 3 most recent
+        backups = sorted(dest_dir.glob("ghostbackup_*.db"), reverse=True)
+        for old in backups[3:]:
+            old.unlink(missing_ok=True)
+        logger.info(f"Manifest DB backed up to SSD: {db_dest} ({len(backups)} copies, kept 3)")
     except Exception as db_err:
         logger.warning(f"Manifest DB backup to SSD failed: {db_err}")
 
@@ -678,7 +692,7 @@ async def dashboard(cfg: ConfigManager = Depends(provide_config),
             "timezone": cfg.timezone,
             "label": f"Daily at {cfg.schedule_time} {cfg.timezone}",
         },
-        "active_run":  _active_run,
+        "active_run":  dict(_active_run) if _active_run else None,
     }
 
 
@@ -712,9 +726,10 @@ async def stop_run():
 
 @app.get("/run/status")
 async def run_status():
-    if not _active_run:
-        return {"status": "idle"}
-    return _active_run
+    with _run_mutex:
+        if not _active_run:
+            return {"status": "idle"}
+        return dict(_active_run)
 
 
 @app.get("/runs")
@@ -898,20 +913,17 @@ async def restore(request: Request, req: RestoreRequest, background_tasks: Backg
 
 @app.post("/verify")
 @_limiter.limit("5/minute")
-async def verify_backups(request: Request, background_tasks: BackgroundTasks,
+async def verify_backups(request: Request,
                          source_label: Optional[str] = None,
                          syncer: LocalSyncer = Depends(get_syncer)):
     """
     Re-reads backed-up files and verifies hashes against the manifest.
     Run manually or schedule weekly to catch SSD corruption early.
+    Returns results synchronously so the UI can display them.
     """
     if _active_run and _active_run.get("status") == "running":
         raise HTTPException(409, "Cannot verify while a backup is running")
-    background_tasks.add_task(_do_verify, source_label, syncer)
-    return {"message": "Verification started", "source": source_label or "all"}
 
-
-async def _do_verify(source_label: Optional[str] = None, syncer: LocalSyncer = None):
     loop   = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None,
@@ -935,6 +947,12 @@ async def _do_verify(source_label: Optional[str] = None, syncer: LocalSyncer = N
             send_email=True,
         )
     logger.info(f"Verification done — {result}")
+    return {
+        "verified": result["verified"],
+        "failed":   result["failed"],
+        "missing":  result["missing"],
+        "source":   source_label or "all",
+    }
 
 
 @app.patch("/settings/smtp")

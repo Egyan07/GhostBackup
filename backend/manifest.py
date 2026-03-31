@@ -42,6 +42,7 @@ class ManifestDB:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.execute("PRAGMA synchronous=FULL")
+        self._record_file_count: int = 0
         self._migrate()
         logger.info(f"ManifestDB ready: {db_path}")
 
@@ -257,7 +258,6 @@ class ManifestDB:
 
     # ── File records ──────────────────────────────────────────────────────────
 
-    _record_file_count: int = 0
     _COMMIT_EVERY: int = 100
 
     def record_file(

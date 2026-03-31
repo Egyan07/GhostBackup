@@ -227,6 +227,7 @@ function startNotifyServer() {
     });
   });
 
+  killPortConflict(8766);
   notifyServer.listen(8766, "127.0.0.1", () => {
     console.log("[main] Notify server listening on 127.0.0.1:8766");
   });

@@ -182,9 +182,20 @@ export default function BackupConfig() {
             <label className="input-label">Timezone</label>
             <select className="fi" value={cfg.schedule?.timezone || "Europe/London"}
               onChange={e => setCfg(c => ({ ...c, schedule: { ...c.schedule, timezone: e.target.value } }))}>
-              <option value="Asia/Kathmandu">Asia/Kathmandu (UTC+5:45)</option>
-              <option value="Europe/London">Europe/London</option>
+              <option value="Europe/London">Europe/London (GMT/BST)</option>
               <option value="UTC">UTC</option>
+              <option value="Europe/Dublin">Europe/Dublin (IST)</option>
+              <option value="Europe/Paris">Europe/Paris (CET)</option>
+              <option value="Europe/Berlin">Europe/Berlin (CET)</option>
+              <option value="Europe/Amsterdam">Europe/Amsterdam (CET)</option>
+              <option value="Europe/Zurich">Europe/Zurich (CET)</option>
+              <option value="America/New_York">America/New_York (EST/EDT)</option>
+              <option value="America/Chicago">America/Chicago (CST/CDT)</option>
+              <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+              <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+              <option value="Asia/Kathmandu">Asia/Kathmandu (UTC+5:45)</option>
+              <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+              <option value="Australia/Sydney">Australia/Sydney (AEST)</option>
             </select>
           </div>
         </div>

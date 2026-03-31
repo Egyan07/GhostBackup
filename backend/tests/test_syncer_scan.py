@@ -25,9 +25,10 @@ def _make_config(
     cfg.max_file_size_bytes = max_file_size_gb * 1024 ** 3
     cfg.chunk_size_bytes    = 65536
     cfg.ssd_path            = "/tmp/fake_ssd"
-    cfg.encryption_key      = None
-    cfg.hkdf_salt           = b"ghostbackup-stream-v1"
-    cfg.encryption_enabled  = False
+    cfg.encryption_key            = None
+    cfg.hkdf_salt                 = b"ghostbackup-stream-v1"
+    cfg.encryption_enabled        = False
+    cfg.encryption_config_enabled = False
     return cfg
 
 

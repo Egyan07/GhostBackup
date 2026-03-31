@@ -44,7 +44,8 @@ class _CryptoHelper:
     detected automatically and decrypted transparently.
     """
 
-    def __init__(self, key: Optional[bytes], salt: bytes = b"ghostbackup-stream-v1"):
+    def __init__(self, key: Optional[bytes], salt: bytes = b"ghostbackup-stream-v1",
+                 require_encryption: bool = False):
         self._fernet = None
         self._aesgcm = None
         self._salt   = salt
@@ -67,15 +68,25 @@ class _CryptoHelper:
                     salt=self._salt,
                     info=b"aesgcm-encrypt",
                 ).derive(raw_key)
+                self._derived_key = derived  # stored for key_fingerprint — never the raw Fernet key
                 self._aesgcm = AESGCM(derived)
 
                 logger.info("Backup encryption: ENABLED (AES-256-GCM streaming)")
             except Exception as e:
+                if require_encryption:
+                    raise RuntimeError(
+                        f"Encryption is required but failed to initialise: {e}"
+                    ) from e
                 logger.error(
                     f"Failed to initialise encryption: {e} — backups will be UNENCRYPTED"
                 )
                 self._fernet = None
                 self._aesgcm = None
+        elif require_encryption:
+            raise RuntimeError(
+                "Encryption is required but no GHOSTBACKUP_KEY is set. "
+                "Set the environment variable or disable require_encryption in config."
+            )
 
     @property
     def enabled(self) -> bool:
@@ -84,15 +95,10 @@ class _CryptoHelper:
     @property
     def key_fingerprint(self) -> Optional[str]:
         """First 16 hex chars of a SHA-256 hash of the derived AES key — never the key itself."""
-        if self._aesgcm is None:
+        if self._aesgcm is None or not hasattr(self, "_derived_key"):
             return None
         import hashlib
-        # _aesgcm._key is the raw 32-byte AES key stored by the AESGCM object
-        try:
-            raw = self._aesgcm._key
-        except AttributeError:
-            return None
-        return hashlib.sha256(raw).hexdigest()[:16]
+        return hashlib.sha256(self._derived_key).hexdigest()[:16]
 
     @staticmethod
     def _is_stream_format(path: Path) -> bool:
@@ -283,13 +289,12 @@ class LocalSyncer:
     def __init__(self, config: ConfigManager, manifest: ManifestDB):
         self._config   = config
         self._manifest = manifest
-        self._crypto   = _CryptoHelper(config.encryption_key, salt=config.hkdf_salt)
+        self._crypto   = _CryptoHelper(
+            config.encryption_key,
+            salt=config.hkdf_salt,
+            require_encryption=config.encryption_config_enabled,
+        )
         self._cleanup_orphan_tmp_files()
-        if config.encryption_config_enabled and not self._crypto.enabled:
-            logger.warning(
-                "Encryption is enabled in config but GHOSTBACKUP_ENCRYPTION_KEY is not set. "
-                "Backups will be stored UNENCRYPTED. Run SETUP.md step 3 to configure the key."
-            )
 
     @property
     def encryption_active(self) -> bool:
