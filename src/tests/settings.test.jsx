@@ -27,6 +27,8 @@ vi.mock("../api-client.js", () => ({
     watcherStop:           vi.fn().mockResolvedValue({ running: false }),
     updateRetention:       vi.fn().mockResolvedValue({}),
     verifyBackups:         vi.fn().mockResolvedValue({ verified: 0, failed: 0 }),
+    drillStatus:           vi.fn().mockResolvedValue({ last_completed: null, days_since_last: null, next_due: null, overdue: false, history: [] }),
+    health:                vi.fn().mockResolvedValue({ status: "ok", key_storage: "keyring" }),
   },
 }));
 

@@ -23,7 +23,7 @@ export default function RestoreUI() {
         setRuns(ok);
         if (ok[0]) selectRun(ok[0]);
       })
-      .catch(e => setError(e.message))
+      .catch(e => setError(e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -48,7 +48,7 @@ export default function RestoreUI() {
       const r = await api.restore({ run_id: sel.id, library: selLib, destination: dest, dry_run: dry });
       setResult(r);
     }
-    catch (e) { setError(e.message); }
+    catch (e) { setError(e); }
     finally { setRestoring(false); }
   };
 

@@ -39,13 +39,22 @@ describe("ApiError", () => {
     expect(new ApiError(404, "not found").message).toBe("not found");
   });
 
-  it("stores optional body", () => {
-    const err = new ApiError(422, "invalid", { field: "path" });
-    expect(err.body).toEqual({ field: "path" });
+  it("stores optional code", () => {
+    const err = new ApiError(409, "Backup already in progress", "GB-E020");
+    expect(err.code).toBe("GB-E020");
   });
 
-  it("body defaults to null when not provided", () => {
-    expect(new ApiError(500, "error").body).toBeNull();
+  it("stores optional fix", () => {
+    const err = new ApiError(409, "Backup already in progress", "GB-E020", "Wait for the current run to finish");
+    expect(err.fix).toBe("Wait for the current run to finish");
+  });
+
+  it("code defaults to null when not provided", () => {
+    expect(new ApiError(500, "error").code).toBeNull();
+  });
+
+  it("fix defaults to null when not provided", () => {
+    expect(new ApiError(500, "error").fix).toBeNull();
   });
 });
 
