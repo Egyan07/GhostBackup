@@ -136,7 +136,7 @@ Before adopting GhostBackup, understand what it **does not** do:
 | **Long paths** | Paths over 260 characters may fail unless Windows long path support is enabled (`HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`). |
 | **Scale** | Tested up to ~50GB source data. Performance on 500GB+ datasets is untested. |
 | **No external security audit** | Encryption and authentication use industry-standard libraries but have not been reviewed by a third-party security firm. |
-| **Encryption key in plaintext** | The key is stored in `.env.local` on disk. If you lose it, **all encrypted backups are permanently unrecoverable.** |
+| **Encryption key storage** | Key is stored in Windows Credential Manager (keyring) by default. Falls back to `.env.local` for CI environments. If the key is lost from all locations, all encrypted backups are permanently unrecoverable. |
 | **Not legal compliance** | GhostBackup provides tools that *support* compliance. It is not a compliance certification. |
 
 ---

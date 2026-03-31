@@ -49,7 +49,7 @@ export default function App() {
   const [screen, setScreen] = useState("dashboard");
   const [health, setHealth] = useState(null);
   const [clock,  setClock]  = useState("");
-  const [appVersion, setAppVersion] = useState("v2.0.0");
+  const [appVersion, setAppVersion] = useState("v3.0.0");
   const [appAuthor,  setAppAuthor]  = useState("");
   const [theme, setTheme] = useState(() => localStorage.getItem("gb-theme") || "dark");
 

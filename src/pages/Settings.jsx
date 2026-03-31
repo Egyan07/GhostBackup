@@ -53,14 +53,18 @@ export default function Settings() {
   const [watcherMsg, setWatcherMsg] = useState(null);
   const [pendingKey, setPendingKey] = useState(null);
   const [keyMsg, setKeyMsg]         = useState(null);
+  const [drillStatus, setDrillStatus] = useState(null);
+  const [healthData, setHealthData]   = useState(null);
 
   useEffect(() => {
     Promise.all([
       api.getConfig(),
       api.ssdStatus().catch(() => null),
       api.watcherStatus().catch(() => null),
-    ]).then(([c, s, w]) => { setCfg(c); setSsdStatus(s); setWatcherStatus(w); })
-      .catch(e => setError(e.message))
+      api.drillStatus().catch(() => null),
+      api.health().catch(() => null),
+    ]).then(([c, s, w, d, h]) => { setCfg(c); setSsdStatus(s); setWatcherStatus(w); setDrillStatus(d); setHealthData(h); })
+      .catch(e => setError(e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -201,7 +205,7 @@ export default function Settings() {
             onClick={async () => {
               setSaving(s => ({ ...s, smtp: true }));
               try { await api.updateSmtp({ host: cfg.smtp?.host, port: cfg.smtp?.port, user: cfg.smtp?.user, recipients: cfg.smtp?.recipients }); }
-              catch (e) { setError(e.message); }
+              catch (e) { setError(e); }
               finally { setSaving(s => ({ ...s, smtp: false })); }
             }}
             disabled={saving.smtp}>{saving.smtp ? "Saving…" : "Save SMTP"}
@@ -240,7 +244,7 @@ export default function Settings() {
             onClick={async () => {
               setSaving(s => ({ ...s, ret: true }));
               try { await api.updateRetention({ daily_days: cfg.retention?.daily_days, weekly_days: cfg.retention?.weekly_days, guard_days: cfg.retention?.guard_days }); }
-              catch (e) { setError(e.message); }
+              catch (e) { setError(e); }
               finally { setSaving(s => ({ ...s, ret: false })); }
             }}
             disabled={saving.ret}>{saving.ret ? "Saving…" : "Save Retention"}
@@ -282,6 +286,41 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Restore Drill */}
+      <div className="card">
+        <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>🧪</span> Restore Drill
+        </div>
+        <div className="text-sm text-secondary mb-12" style={{ lineHeight: 1.6 }}>
+          Every non-dry-run restore counts as a drill. GhostBackup escalates reminders if no drill has been completed in 30 days.
+        </div>
+        {drillStatus ? (
+          <div className="grid-3" style={{ gap: 10, marginBottom: 12 }}>
+            {[
+              { label: "Last Drill",   value: drillStatus.last_completed ? drillStatus.last_completed.slice(0, 10) : "Never" },
+              { label: "Days Since",   value: drillStatus.days_since_last != null ? `${drillStatus.days_since_last}d` : "—" },
+              { label: "Next Due",     value: drillStatus.next_due ? drillStatus.next_due.slice(0, 10) : "—" },
+            ].map(s => (
+              <div key={s.label} className="stat-card">
+                <div className="text-xs text-tertiary mb-4">{s.label}</div>
+                <div className="stat-card-value">{s.value}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="alert alert-info mb-12">
+            <span className="alert-icon">ℹ</span>
+            <span>No drill data yet. Run a real (non-dry-run) restore to record the first drill.</span>
+          </div>
+        )}
+        {drillStatus?.overdue && (
+          <div className="alert alert-warn">
+            <span className="alert-icon">⚠</span>
+            <span>Restore drill overdue — last completed {drillStatus.days_since_last} days ago. Run a test restore from the Restore page.</span>
+          </div>
+        )}
+      </div>
+
       {/* Encryption */}
       <div className="card">
         <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -296,6 +335,11 @@ export default function Settings() {
           <span className={`pill ${cfg?.encryption_active ? "pill-success" : "pill-idle"}`}>
             {cfg?.encryption_active ? "● Encryption Active" : "○ Encryption Inactive"}
           </span>
+          {healthData?.key_storage && (
+            <span className="text-xs text-secondary" style={{ fontFamily: "var(--font-mono)" }}>
+              Key storage: {healthData.key_storage}
+            </span>
+          )}
           {!cfg?.encryption_active && (
             <div className="alert alert-warn" style={{ flex: 1, marginBottom: 0 }}>
               <span className="alert-icon">⚠</span>

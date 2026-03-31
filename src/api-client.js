@@ -53,13 +53,15 @@ export class ApiError extends Error {
   /**
    * @param {number} status  HTTP status code
    * @param {string} message Human-readable error detail
-   * @param {*}      body    Raw response body, if available
+   * @param {string} code    Structured GB-Exxx error code, if returned by backend
+   * @param {string} fix     Actionable fix suggestion, if returned by backend
    */
-  constructor(status, message, body = null) {
+  constructor(status, message, code = null, fix = null) {
     super(message);
     this.name   = "ApiError";
     this.status = status;
-    this.body   = body;
+    this.code   = code;
+    this.fix    = fix;
   }
 }
 
@@ -96,13 +98,17 @@ export async function request(method, path, body, params) {
 
   if (!res.ok) {
     let detail = res.statusText;
+    let code   = null;
+    let fix    = null;
     try {
       const j = await res.json();
       detail = j.detail?.message || j.detail || j.message || detail;
+      code   = j.detail?.code   ?? null;
+      fix    = j.detail?.fix    ?? null;
     } catch {
       // Response body was not JSON — use statusText as-is
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, code, fix);
   }
 
   if (res.status === 204 || res.headers.get("content-length") === "0") {
