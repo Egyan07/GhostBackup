@@ -454,7 +454,8 @@ GhostBackup/
 
 **What's NOT covered:**
 - No external penetration testing or third-party security audit
-- Encryption key stored in plaintext in `.env.local` — protect with OS-level permissions
+- Encryption key stored in Windows Credential Manager by default;
+  `.env.local` fallback used in CI — protect with OS-level permissions
 - API is localhost-only with no TLS (acceptable for local Electron ↔ backend communication)
 
 **Vulnerability Reporting:**
