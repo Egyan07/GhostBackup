@@ -68,7 +68,7 @@ export default function BackupConfig() {
   useEffect(() => {
     api.getConfig()
       .then(d => { setCfg(d); setLoading(false); })
-      .catch(e => { setError(e.message); setLoading(false); });
+      .catch(e => { setError(e); setLoading(false); });
   }, []);
 
   if (loading) return <LoadingState />;
@@ -89,7 +89,7 @@ export default function BackupConfig() {
     try {
       await api.updateConfig(buildPayload(cfg));
       setSaved(true); setTimeout(() => setSaved(false), 2500);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e); }
     finally { setSaving(false); }
   };
 
@@ -103,7 +103,7 @@ export default function BackupConfig() {
     try {
       await api.updateConfig(buildPayload(updated));
       setSaved(true); setTimeout(() => setSaved(false), 2500);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e); }
     finally { setSaving(false); }
   };
 
@@ -120,14 +120,14 @@ export default function BackupConfig() {
       setCfg(config);
       setNewFolder({ label: "", path: "", enabled: true });
       setAddingFolder(false);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e); }
   };
 
   const removeFolder = async (label) => {
     try {
       const { config } = await api.removeSite(label);
       setCfg(config);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e); }
   };
 
   const toggleFolder = async (label, enabled) => {
@@ -138,7 +138,7 @@ export default function BackupConfig() {
         ...c,
         sources: (c.sources || []).map(s => (s.label === label || s.name === label ? source : s)),
       }));
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e); }
   };
 
   const addEx = () => {

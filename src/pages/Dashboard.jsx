@@ -14,7 +14,7 @@ export default function Dashboard() {
 
   const load = useCallback(async () => {
     try { const d = await api.dashboard(); setData(d); setError(null); }
-    catch (e) { setError(e.message); }
+    catch (e) { setError(e); }
     finally { setLoading(false); }
   }, []);
 

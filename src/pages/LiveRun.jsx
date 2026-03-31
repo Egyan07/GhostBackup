@@ -11,7 +11,7 @@ export default function LiveRun() {
 
   const poll = useCallback(async () => {
     try { const s = await api.runStatus(); setStatus(s); setError(null); }
-    catch (e) { setError(e.message); }
+    catch (e) { setError(e); }
   }, []);
 
   const intervalRef = useRef(null);
@@ -34,14 +34,14 @@ export default function LiveRun() {
   const startRun = async (full = false) => {
     setStarting(true); setError(null);
     try { await api.startRun({ full }); await poll(); }
-    catch (e) { setError(e.message); }
+    catch (e) { setError(e); }
     finally { setStarting(false); }
   };
 
   const stopRun = async () => {
     setStopping(true);
     try { await api.stopRun(); await poll(); }
-    catch (e) { setError(e.message); }
+    catch (e) { setError(e); }
     finally { setStopping(false); }
   };
 

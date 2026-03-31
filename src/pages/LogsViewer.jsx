@@ -17,7 +17,7 @@ export default function LogsViewer() {
   useEffect(() => {
     api.getRuns(30)
       .then(d => { setRuns(d); if (d[0]) setSel(d[0]); })
-      .catch(e => setError(e.message))
+      .catch(e => setError(e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -28,7 +28,7 @@ export default function LogsViewer() {
       api.getRun(sel.id),
     ])
       .then(([l, r]) => { setLogs(l); setRd(r); })
-      .catch(e => setError(e.message));
+      .catch(e => setError(e));
   }, [sel, filter]);
 
   const filtered = search
