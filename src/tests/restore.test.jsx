@@ -22,7 +22,7 @@ vi.mock("../api-client.js", () => ({
 // Stub child components
 // ---------------------------------------------------------------------------
 vi.mock("../components/StatusPill.jsx",  () => ({ default: ({ status }) => <span data-testid="status-pill">{status}</span> }));
-vi.mock("../components/ErrBanner.jsx",   () => ({ default: ({ error, onDismiss }) => error ? <div data-testid="err-banner" onClick={onDismiss}>{error}</div> : null }));
+vi.mock("../components/ErrBanner.jsx",   () => ({ default: ({ error, onDismiss }) => error ? <div data-testid="err-banner" onClick={onDismiss}>{typeof error === "string" ? error : error?.message ?? String(error)}</div> : null }));
 vi.mock("../components/LoadingState.jsx",() => ({ default: () => <div data-testid="loading-state" /> }));
 
 import RestoreUI from "../pages/RestoreUI.jsx";
