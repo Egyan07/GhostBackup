@@ -21,6 +21,7 @@ logger = logging.getLogger("scheduler")
 JOB_ID          = "ghostbackup_daily"
 WATCHDOG_JOB_ID = "ghostbackup_watchdog"
 MISSED_JOB_ID   = "ghostbackup_missed_check"
+DRILL_JOB_ID    = "ghostbackup_drill_check"
 
 MISSED_BACKUP_HOURS = 36
 
@@ -63,6 +64,7 @@ class BackupScheduler:
         self._schedule_daily_job()
         self._schedule_watchdog()
         self._schedule_missed_backup_check()
+        self._schedule_drill_check()
         self._sched.start()
         self._running = True
         logger.info(
@@ -267,6 +269,94 @@ class BackupScheduler:
 
         except Exception as e:
             logger.error(f"Missed-backup check error: {e}")
+
+    # ── Restore drill check ──────────────────────────────────────────────────
+
+    _DRILL_DUE_DAYS = 30
+    _DRILL_WARN_DAYS = 37
+    _DRILL_CRITICAL_DAYS = 44
+    _drill_alerted_level: Optional[str] = None
+
+    def _schedule_drill_check(self) -> None:
+        self._sched.add_job(
+            self._restore_drill_check,
+            trigger="interval",
+            hours=24,
+            id=DRILL_JOB_ID,
+            name="GhostBackup Restore Drill Check",
+            replace_existing=True,
+        )
+
+    async def _restore_drill_check(self) -> None:
+        """
+        Escalating reminders for monthly restore drills.
+        - 30 days: info-level alert
+        - 37 days: warning + email
+        - 44 days: critical + email
+        Resets when a drill is completed (days < 30).
+        """
+        if not self._reporter or not self._manifest_ref:
+            return
+
+        try:
+            last = self._manifest_ref.get_last_drill_completion()
+            if not last:
+                # No drill ever recorded — treat as overdue from day one
+                days_since = self._DRILL_CRITICAL_DAYS
+            else:
+                last_dt = datetime.fromisoformat(last)
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                days_since = (datetime.now(timezone.utc) - last_dt).days
+
+            if days_since < self._DRILL_DUE_DAYS:
+                # Drill is current — reset alert level
+                self._drill_alerted_level = None
+                return
+
+            if days_since >= self._DRILL_CRITICAL_DAYS and self._drill_alerted_level != "critical":
+                self._drill_alerted_level = "critical"
+                logger.critical(
+                    f"Restore drill CRITICAL overdue: {days_since} days since last drill"
+                )
+                await self._reporter.alert_and_notify(
+                    level="error",
+                    title=f"Restore drill critically overdue ({days_since} days)",
+                    body=(
+                        f"No restore drill has been completed in {days_since} days. "
+                        f"Monthly test restores are required for compliance. "
+                        f"Please perform a test restore immediately."
+                    ),
+                    send_email=True,
+                )
+            elif days_since >= self._DRILL_WARN_DAYS and self._drill_alerted_level not in ("warn", "critical"):
+                self._drill_alerted_level = "warn"
+                logger.warning(
+                    f"Restore drill overdue: {days_since} days since last drill"
+                )
+                await self._reporter.alert_and_notify(
+                    level="warning",
+                    title=f"Restore drill overdue ({days_since} days)",
+                    body=(
+                        f"No restore drill has been completed in {days_since} days. "
+                        f"Monthly test restores are recommended for compliance."
+                    ),
+                    send_email=True,
+                )
+            elif days_since >= self._DRILL_DUE_DAYS and self._drill_alerted_level is None:
+                self._drill_alerted_level = "info"
+                logger.info(
+                    f"Restore drill due: {days_since} days since last drill"
+                )
+                self._reporter.alerts.add(
+                    "info",
+                    "Restore drill due",
+                    f"It has been {days_since} days since the last restore drill. "
+                    f"Consider performing a test restore.",
+                )
+
+        except Exception as e:
+            logger.error(f"Restore drill check error: {e}")
 
     # ── Utilities ─────────────────────────────────────────────────────────────
 

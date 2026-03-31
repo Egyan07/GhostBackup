@@ -50,6 +50,7 @@ retention:
   weekly_days: 2555          # 7 years of weekly backups (Companies Act minimum)
   compliance_years: 7        # Hard floor — retention cannot be set below this
   guard_days: 7              # Safety window: never prune backups newer than 7 days
+  immutable_days: 7          # Immutability window: backups younger than this cannot be deleted
 
 # Stop a source library if more than this fraction of files fail in one run
 circuit_breaker_threshold: 0.05

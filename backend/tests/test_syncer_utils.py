@@ -150,6 +150,7 @@ def test_prune_calls_mark_run_pruned_when_files_deleted(tmp_path):
     cfg.encryption_key        = None
     cfg.encryption_enabled    = False
     cfg.encryption_config_enabled = False
+    cfg.immutable_days        = 7
 
     manifest = MagicMock()
     manifest.get_backup_files_for_prune.return_value = [{
@@ -158,9 +159,9 @@ def test_prune_calls_mark_run_pruned_when_files_deleted(tmp_path):
     }]
 
     syncer = LocalSyncer(config=cfg, manifest=manifest)
-    removed = syncer.prune_old_backups(daily_days=365, weekly_days=2555, guard_days=7)
+    result = syncer.prune_old_backups(daily_days=365, weekly_days=2555, guard_days=7)
 
-    assert removed == 1
+    assert result["removed"] == 1
     assert not backup_file.exists()
     # mark_run_pruned must have been called at least once
     manifest.mark_run_pruned.assert_called_once()
@@ -180,6 +181,7 @@ def test_prune_does_not_mark_pruned_when_nothing_deleted(tmp_path):
     cfg.encryption_key        = None
     cfg.encryption_enabled    = False
     cfg.encryption_config_enabled = False
+    cfg.immutable_days        = 7
 
     manifest = MagicMock()
     # Return a file that doesn't exist on disk — nothing deleted
@@ -189,10 +191,86 @@ def test_prune_does_not_mark_pruned_when_nothing_deleted(tmp_path):
     }]
 
     syncer = LocalSyncer(config=cfg, manifest=manifest)
-    removed = syncer.prune_old_backups(daily_days=365, weekly_days=2555, guard_days=7)
+    result = syncer.prune_old_backups(daily_days=365, weekly_days=2555, guard_days=7)
 
-    assert removed == 0
+    assert result["removed"] == 0
     manifest.mark_run_pruned.assert_not_called()
+
+
+# =============================================================================
+#   Immutability window
+# =============================================================================
+
+def test_prune_skips_immutable_backups(tmp_path):
+    """
+    Backups younger than immutable_days must not be deleted,
+    even if they are older than guard_days.
+    Use guard_days=1 so the 3-day-old file passes guard but is caught
+    by the 7-day immutability window.
+    """
+    from unittest.mock import MagicMock
+    from datetime import datetime, timezone, timedelta
+    from syncer import LocalSyncer
+
+    # Immutable file: 3 days old (past 1-day guard, within 7-day immutable window)
+    immutable_file = tmp_path / "recent_backup.xlsx"
+    immutable_file.write_bytes(b"recent")
+    recent_ts = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+
+    # Prunable file: 400 days old (well past both guard and immutable window)
+    old_file = tmp_path / "old_backup.xlsx"
+    old_file.write_bytes(b"old")
+    old_ts = (datetime.now(timezone.utc) - timedelta(days=400)).isoformat()
+
+    cfg = MagicMock()
+    cfg.get_enabled_sources.return_value = [{"label": "Accounts"}]
+    cfg.secondary_ssd_path    = ""
+    cfg.encryption_key        = None
+    cfg.encryption_enabled    = False
+    cfg.encryption_config_enabled = False
+    cfg.immutable_days        = 7
+
+    manifest = MagicMock()
+    manifest.get_backup_files_for_prune.return_value = [
+        {"backup_path": str(immutable_file), "started_at": recent_ts},
+        {"backup_path": str(old_file),       "started_at": old_ts},
+    ]
+
+    syncer = LocalSyncer(config=cfg, manifest=manifest)
+    result = syncer.prune_old_backups(daily_days=365, weekly_days=2555, guard_days=1)
+
+    # Only the old file should be removed; the recent one is immutable
+    assert result["removed"] == 1
+    assert result["immutable_skipped"] == 1
+    assert immutable_file.exists(), "Immutable backup must not be deleted"
+    assert not old_file.exists(), "Old backup should be pruned"
+
+
+def test_immutable_days_validation():
+    """immutable_days must be an integer >= 7."""
+    from unittest.mock import MagicMock, patch
+    from pathlib import Path
+    import tempfile, yaml
+
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = Path(td) / "config.yaml"
+        cfg_path.write_text(yaml.dump({"ssd_path": "/tmp"}))
+
+        from config import ConfigManager
+        mgr = ConfigManager(config_path=cfg_path)
+
+        import pytest
+        # Value below minimum
+        with pytest.raises(ValueError, match="immutable_days must be an integer >= 7"):
+            mgr.update({"immutable_days": 3})
+
+        # Non-integer
+        with pytest.raises(ValueError, match="immutable_days must be an integer >= 7"):
+            mgr.update({"immutable_days": 6.5})
+
+        # Valid value should succeed
+        mgr.update({"immutable_days": 14})
+        assert mgr.immutable_days == 14
 
 
 # =============================================================================

@@ -15,6 +15,7 @@ import io
 import json
 import logging
 import os
+import random
 import shutil
 import threading
 import time
@@ -39,6 +40,7 @@ from reporter import Reporter
 from scheduler import BackupScheduler
 from syncer import LocalSyncer, get_ssd_status
 from watcher import FileWatcher
+from errors import raise_gb
 
 logging.basicConfig(
     level=logging.INFO,
@@ -108,6 +110,43 @@ async def _desktop_notify(title: str, body: str) -> None:
         logger.debug(f"Desktop notification failed: {e}")
 
 
+async def _startup_spot_check(syncer: LocalSyncer, manifest: ManifestDB,
+                              reporter: Reporter) -> None:
+    """Spot-check 5 random files from the last successful backup at startup."""
+    try:
+        last_run = manifest.get_latest_successful_run()
+        if not last_run:
+            logger.info("Startup spot-check: no previous backups — skipping")
+            return
+
+        all_files = manifest.get_files(last_run["id"])
+        if not all_files:
+            return
+
+        sample_size = min(5, len(all_files))
+        sample = random.sample(all_files, sample_size)
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, lambda: syncer.verify_files(sample))
+
+        if result["failed"] or result["missing"]:
+            await reporter.alert_and_notify(
+                level="critical",
+                title="Startup integrity check FAILED",
+                body=(
+                    f"Spot-checked {sample_size} files from last backup: "
+                    f"{result['failed']} corrupt, {result['missing']} missing. "
+                    f"Run a full Verify Integrity check immediately."
+                ),
+                send_email=True,
+            )
+            logger.error(f"Startup spot-check FAILED: {result}")
+        else:
+            logger.info(f"Startup spot-check: {result['verified']}/{sample_size} files OK")
+    except Exception as e:
+        logger.warning(f"Startup spot-check error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _config, _manifest, _scheduler, _reporter, _syncer, _watcher
@@ -142,6 +181,9 @@ async def lifespan(app: FastAPI):
         )
 
     logger.info(f"GhostBackup API ready on http://127.0.0.1:{API_PORT}")
+
+    # ── Startup spot-check (non-blocking) ────────────────────────────────────
+    asyncio.create_task(_startup_spot_check(_syncer, _manifest, _reporter))
 
     # ── Background SSD health polling ─────────────────────────────────────────
     _ssd_poll_stop = asyncio.Event()
@@ -186,7 +228,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="2.9.1", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="3.0.0", lifespan=lifespan)
 
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
@@ -667,6 +709,110 @@ async def health(cfg: ConfigManager = Depends(provide_config),
         },
         "encryption_active": syncer.encryption_active if syncer else False,
         "hkdf_salt_active":  bool(cfg.hkdf_salt != b"ghostbackup-stream-v1"),
+        "key_storage":       cfg.key_storage_method,
+    }
+
+
+@app.get("/health/deep")
+@_limiter.limit("10/minute")
+async def health_deep(request: Request,
+                      cfg: ConfigManager = Depends(provide_config),
+                      manifest: ManifestDB = Depends(get_manifest),
+                      syncer: LocalSyncer = Depends(get_syncer),
+                      scheduler: BackupScheduler = Depends(get_scheduler),
+                      reporter: Reporter = Depends(get_reporter)):
+    """
+    Comprehensive health check for external monitoring.
+    Returns SSD status, last backup age, encryption, integrity spot-check,
+    scheduler state, drill status, and overall assessment.
+    """
+    from syncer import get_ssd_status
+
+    # SSD
+    ssd = get_ssd_status(cfg.ssd_path)
+    ssd_connected = ssd.get("status") == "ok"
+    ssd_free_gb = ssd.get("available_gb", 0)
+
+    secondary_ssd = get_ssd_status(cfg.secondary_ssd_path) if cfg.secondary_ssd_path else None
+    secondary_connected = secondary_ssd.get("status") == "ok" if secondary_ssd else None
+
+    # Last backup
+    last_run = manifest.get_latest_successful_run()
+    last_age_hours = None
+    last_status = None
+    if last_run:
+        last_dt = datetime.fromisoformat(last_run["started_at"])
+        if last_dt.tzinfo is None:
+            last_dt = last_dt.replace(tzinfo=timezone.utc)
+        last_age_hours = round(
+            (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600, 1
+        )
+        last_status = last_run["status"]
+
+    # Spot-check (up to 5 random files)
+    spot = {"checked": 0, "passed": 0, "failed": 0}
+    try:
+        if last_run:
+            all_files = manifest.get_files(last_run["id"])
+            if all_files:
+                sample = random.sample(all_files, min(5, len(all_files)))
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(
+                    None, lambda: syncer.verify_files(sample)
+                )
+                spot = {
+                    "checked": result["verified"] + result["failed"] + result["missing"],
+                    "passed": result["verified"],
+                    "failed": result["failed"] + result["missing"],
+                }
+    except Exception as e:
+        logger.warning(f"Deep health spot-check error: {e}")
+
+    # Manifest
+    manifest_ok = True
+    manifest_size_mb = 0
+    try:
+        manifest_size_mb = round(manifest.db_path.stat().st_size / (1024 * 1024), 1)
+    except Exception:
+        manifest_ok = False
+
+    # Restore drill
+    drill_last = manifest.get_last_drill_completion()
+    drill_overdue = False
+    drill_days_remaining = None
+    if drill_last:
+        drill_dt = datetime.fromisoformat(drill_last)
+        if drill_dt.tzinfo is None:
+            drill_dt = drill_dt.replace(tzinfo=timezone.utc)
+        days_since = (datetime.now(timezone.utc) - drill_dt).days
+        drill_overdue = days_since >= 30
+        drill_days_remaining = max(0, 30 - days_since)
+
+    # Overall assessment
+    overall = "healthy"
+    if not ssd_connected or not syncer.encryption_active or spot["failed"] > 0:
+        overall = "unhealthy"
+    elif (last_age_hours and last_age_hours > 36) or drill_overdue or \
+         (secondary_connected is False):
+        overall = "degraded"
+
+    return {
+        "ssd_connected":               ssd_connected,
+        "ssd_free_gb":                 ssd_free_gb,
+        "secondary_ssd_connected":     secondary_connected,
+        "last_backup_age_hours":       last_age_hours,
+        "last_backup_status":          last_status,
+        "encryption_active":           syncer.encryption_active if syncer else False,
+        "key_storage":                 cfg.key_storage_method,
+        "manifest_ok":                 manifest_ok,
+        "manifest_size_mb":            manifest_size_mb,
+        "spot_check":                  spot,
+        "scheduler_running":           scheduler.is_running() if scheduler else False,
+        "next_backup":                 scheduler.next_run_time() if scheduler else None,
+        "restore_drill_overdue":       drill_overdue,
+        "restore_drill_days_remaining": drill_days_remaining,
+        "version":                     app.version,
+        "overall":                     overall,
     }
 
 
@@ -706,7 +852,7 @@ async def start_run(request: Request, req: RunRequest, background_tasks: Backgro
                     scheduler: BackupScheduler = Depends(get_scheduler)):
     with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
-            raise HTTPException(409, "A backup run is already in progress")
+            raise_gb("GB-E020", 409)
     background_tasks.add_task(
         run_backup_job, req.full, req.sources,
         cfg, manifest, reporter, syncer, scheduler,
@@ -867,17 +1013,17 @@ async def restore(request: Request, req: RestoreRequest, background_tasks: Backg
     if not run:
         raise HTTPException(404, f"Run #{req.run_id} not found")
     if run["status"] == "failed":
-        raise HTTPException(400, "Cannot restore from a failed run")
+        raise_gb("GB-E040")
 
     files = manifest.get_files(req.run_id, library=req.library,
                                subfolder=req.subfolder)
     if not files:
-        raise HTTPException(404, "No files found matching the restore criteria")
+        raise_gb("GB-E041", 404)
 
     # Validate destination path to prevent path traversal
     dest_resolved = Path(req.destination).resolve()
     if ".." in dest_resolved.parts:
-        raise HTTPException(400, "Path traversal detected in destination")
+        raise_gb("GB-E042")
 
     if req.dry_run:
         return {
@@ -895,6 +1041,10 @@ async def restore(request: Request, req: RestoreRequest, background_tasks: Backg
     try:
         result = await loop.run_in_executor(
             None, lambda: syncer.restore_files(files, req.destination)
+        )
+        manifest.record_drill(
+            restore_run_id=req.run_id,
+            notes=f"Restore of run #{req.run_id} to {req.destination}",
         )
         return {
             "dry_run":      False,
@@ -922,7 +1072,7 @@ async def verify_backups(request: Request,
     Returns results synchronously so the UI can display them.
     """
     if _active_run and _active_run.get("status") == "running":
-        raise HTTPException(409, "Cannot verify while a backup is running")
+        raise_gb("GB-E060", 409)
 
     loop   = asyncio.get_running_loop()
     result = await loop.run_in_executor(
@@ -969,7 +1119,7 @@ async def test_smtp(request: Request, reporter: Reporter = Depends(get_reporter)
         await reporter.send_test_email()
         return {"message": "Test email sent successfully"}
     except Exception as e:
-        raise HTTPException(500, f"SMTP test failed: {e}")
+        raise_gb("GB-E050", 500, f"SMTP test failed: {e}")
 
 
 @app.patch("/settings/retention")
@@ -988,14 +1138,14 @@ async def run_prune(background_tasks: BackgroundTasks,
                     syncer: LocalSyncer = Depends(get_syncer),
                     reporter: Reporter = Depends(get_reporter)):
     if _active_run and _active_run.get("status") == "running":
-        raise HTTPException(409, "Cannot prune while a backup is running")
+        raise_gb("GB-E061", 409)
     background_tasks.add_task(_do_prune, cfg, syncer, reporter)
     return {"message": "Prune job started"}
 
 
 async def _do_prune(cfg: ConfigManager, syncer: LocalSyncer, reporter: Reporter):
     loop   = asyncio.get_running_loop()
-    pruned = await loop.run_in_executor(
+    result = await loop.run_in_executor(
         None,
         lambda: syncer.prune_old_backups(
             cfg.retention_daily_days,
@@ -1003,10 +1153,13 @@ async def _do_prune(cfg: ConfigManager, syncer: LocalSyncer, reporter: Reporter)
             cfg.retention_guard_days,
         ),
     )
-    logger.info(f"Prune complete — {pruned} files removed")
+    removed = result["removed"]
+    skipped = result["immutable_skipped"]
+    logger.info(f"Prune complete — {removed} files removed, {skipped} immutable skipped")
     reporter.alerts.add(
         "info", "Prune complete",
-        f"{pruned} old backup files removed from SSD.",
+        f"{removed} old backup files removed from SSD."
+        + (f" {skipped} recent backups protected by immutability window." if skipped else ""),
     )
 
 
@@ -1078,6 +1231,28 @@ async def dismiss_alert(alert_id: int, reporter: Reporter = Depends(get_reporter
 async def dismiss_all_alerts(reporter: Reporter = Depends(get_reporter)):
     count = reporter.alerts.dismiss_all()
     return {"dismissed": count, "unread_count": 0}
+
+
+@app.get("/settings/drill-status")
+async def drill_status(manifest: ManifestDB = Depends(get_manifest)):
+    last = manifest.get_last_drill_completion()
+    history = manifest.get_drill_history(limit=12)
+    days_since = None
+    next_due = None
+    if last:
+        from datetime import timedelta
+        last_dt = datetime.fromisoformat(last)
+        if last_dt.tzinfo is None:
+            last_dt = last_dt.replace(tzinfo=timezone.utc)
+        days_since = (datetime.now(timezone.utc) - last_dt).days
+        next_due = (last_dt + timedelta(days=30)).isoformat()
+    return {
+        "last_completed": last,
+        "days_since_last": days_since,
+        "next_due": next_due,
+        "overdue": days_since is not None and days_since >= 30,
+        "history": history,
+    }
 
 
 if __name__ == "__main__":

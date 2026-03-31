@@ -4,6 +4,28 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v3.0.0 — Security, Monitoring & Compliance
+
+### Security
+- **Keyring encryption key protection** (`config.py`): Secrets migrate to Windows Credential Manager via `keyring` library. Env var fallback for CI/headless. Key storage method shown in Settings and `/health` endpoint.
+- **Backup immutability window** (`syncer.py`, `config.py`): Backups within `immutable_days` (default 7) cannot be deleted by any prune operation. Configurable, minimum 7 days.
+
+### Monitoring
+- **Startup self-check** (`api.py`): On launch, 5 random files from the last backup are verified against the manifest. Critical alert if any are corrupt or missing.
+- **Deep health endpoint** (`api.py`): `GET /health/deep` returns SSD status, backup age, encryption, spot-check, scheduler, drill status, and overall assessment for external monitoring tools.
+
+### Compliance
+- **Restore drill tracking** (`manifest.py`, `scheduler.py`): Every non-dry-run restore is automatically recorded as a drill. Scheduler escalates reminders: info at 30 days, warn + email at 37, critical + email at 44 days. Drill history viewable via API. Schema v4 migration.
+
+### Developer Experience
+- **Structured error codes** (`errors.py`): All key API errors return `{code, message, fix}`. 18 codes (GB-E001 to GB-E061) documented in SETUP.md. Frontend displays actionable fix suggestions.
+- **E2E integration test** (`test_e2e_pipeline.py`): Full backup → verify → restore → byte-compare pipeline test with real encryption. 3 test variants.
+
+### Testing
+- **365 backend tests passing** (up from 338)
+
+---
+
 ## v2.9.1 — Security Hardening & Code Review Fixes
 
 ### Security

@@ -19,6 +19,13 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger("config")
 
+_keyring = None
+try:
+    import keyring as _keyring
+    logger.info("Keyring available — secrets can use Windows Credential Manager")
+except ImportError:
+    logger.info("Keyring not installed — using environment variables for secrets")
+
 CONFIG_PATH = Path(os.getenv("GHOSTBACKUP_CONFIG", "config/config.yaml"))
 
 DEFAULTS: dict = {
@@ -59,6 +66,7 @@ DEFAULTS: dict = {
         "weekly_days":      2555,
         "compliance_years": 7,
         "guard_days":       7,
+        "immutable_days":   7,
     },
 
     "smtp": {
@@ -128,29 +136,65 @@ class ConfigManager:
         with open(self._path, "w", encoding="utf-8") as f:
             yaml.dump(safe, f, default_flow_style=False, allow_unicode=True)
 
-    # ── Secrets (env vars only, never persisted) ──────────────────────────────
+    # ── Secrets (keyring → env var fallback, never persisted to config) ────────
+
+    _KEYRING_SERVICE = "GhostBackup"
+
+    @staticmethod
+    def _get_secret(keyring_username: str, env_var: str) -> str:
+        """Try keyring first, then fall back to the environment variable."""
+        if _keyring is not None:
+            try:
+                value = _keyring.get_password(
+                    ConfigManager._KEYRING_SERVICE, keyring_username,
+                )
+                if value is not None:
+                    return value
+            except Exception:
+                logger.debug("Keyring lookup failed for %s — falling back to env", keyring_username)
+        return os.getenv(env_var, "")
+
+    @staticmethod
+    def save_secret(keyring_username: str, value: str) -> bool:
+        """Save a secret to keyring if available. Returns True on success."""
+        if _keyring is None:
+            logger.warning("Keyring not available — cannot save secret")
+            return False
+        try:
+            _keyring.set_password(
+                ConfigManager._KEYRING_SERVICE, keyring_username, value,
+            )
+            return True
+        except Exception as exc:
+            logger.error("Failed to save secret to keyring: %s", exc)
+            return False
+
+    @property
+    def key_storage_method(self) -> str:
+        """Return 'keyring' when keyring is active, otherwise 'env'."""
+        return "keyring" if _keyring is not None else "env"
 
     @property
     def smtp_password(self) -> str:
-        return os.getenv("GHOSTBACKUP_SMTP_PASSWORD", "")
+        return self._get_secret("smtp_password", "GHOSTBACKUP_SMTP_PASSWORD")
 
     @property
     def encryption_key(self) -> Optional[bytes]:
         """
-        Encryption key loaded from GHOSTBACKUP_ENCRYPTION_KEY environment variable.
+        Encryption key loaded from keyring or GHOSTBACKUP_ENCRYPTION_KEY env var.
         Returns bytes if set, None otherwise. Never read from config.yaml.
         """
-        raw = os.getenv("GHOSTBACKUP_ENCRYPTION_KEY", "")
+        raw = self._get_secret("encryption_key", "GHOSTBACKUP_ENCRYPTION_KEY")
         return raw.encode() if raw else None
 
     @property
     def hkdf_salt(self) -> bytes:
         """
-        Per-installation HKDF salt loaded from GHOSTBACKUP_HKDF_SALT environment variable.
+        Per-installation HKDF salt from keyring or GHOSTBACKUP_HKDF_SALT env var.
         Falls back to the legacy hardcoded salt for backward compatibility with existing
         encrypted backups. Set this on new installations for stronger key isolation.
         """
-        raw = os.getenv("GHOSTBACKUP_HKDF_SALT", "")
+        raw = self._get_secret("hkdf_salt", "GHOSTBACKUP_HKDF_SALT")
         if raw:
             return raw.encode()
         return b"ghostbackup-stream-v1"
@@ -321,6 +365,10 @@ class ConfigManager:
         return max(7, self._data["retention"]["guard_days"])
 
     @property
+    def immutable_days(self) -> int:
+        return self._data.get("retention", {}).get("immutable_days", 7)
+
+    @property
     def compliance_years(self) -> int:
         return self._data["retention"].get("compliance_years", 7)
 
@@ -385,6 +433,10 @@ class ConfigManager:
             v = updates["circuit_breaker_threshold"]
             if not isinstance(v, (int, float)) or not (0.0 <= v <= 1.0):
                 raise ValueError("circuit_breaker_threshold must be a float between 0.0 and 1.0")
+        if "immutable_days" in updates:
+            v = updates["immutable_days"]
+            if not isinstance(v, int) or v < 7:
+                raise ValueError("immutable_days must be an integer >= 7")
         if "exclude_patterns" in updates:
             if not isinstance(updates["exclude_patterns"], list) or not all(
                 isinstance(p, str) for p in updates["exclude_patterns"]
@@ -410,6 +462,7 @@ class ConfigManager:
             # that would silently have no effect.
             "exclude_patterns":          ("backup",      "exclude_patterns"),
             "circuit_breaker_threshold": ("circuit_breaker_threshold",),
+            "immutable_days":            ("retention",   "immutable_days"),
         }
         ignored = []
         for key, val in updates.items():

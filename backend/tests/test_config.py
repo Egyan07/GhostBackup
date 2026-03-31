@@ -357,3 +357,59 @@ def test_update_smtp_does_not_mutate_caller_dict(cfg):
     cfg.update_smtp(caller_dict)
     assert "password" in caller_dict
     assert caller_dict["password"] == "original_secret"
+
+
+# ── Keyring integration ──────────────────────────────────────────────────────
+
+import config as config_mod
+
+
+class _FakeKeyring:
+    """Minimal keyring stand-in for unit tests."""
+
+    def __init__(self, store: dict | None = None):
+        self._store: dict = store or {}
+
+    def get_password(self, service: str, username: str) -> str | None:
+        return self._store.get((service, username))
+
+    def set_password(self, service: str, username: str, value: str) -> None:
+        self._store[(service, username)] = value
+
+
+class TestKeyringIntegration:
+
+    def test_encryption_key_from_keyring(self, tmp_path, monkeypatch):
+        """When keyring holds the key, config returns it as bytes."""
+        monkeypatch.delenv("GHOSTBACKUP_ENCRYPTION_KEY", raising=False)
+        fake = _FakeKeyring({("GhostBackup", "encryption_key"): "kr-secret"})
+        monkeypatch.setattr(config_mod, "_keyring", fake)
+        cfg = ConfigManager(config_path=tmp_path / "config.yaml")
+        assert cfg.encryption_key == b"kr-secret"
+
+    def test_encryption_key_env_fallback(self, tmp_path, monkeypatch):
+        """When keyring is unavailable, env var is used."""
+        monkeypatch.setattr(config_mod, "_keyring", None)
+        monkeypatch.setenv("GHOSTBACKUP_ENCRYPTION_KEY", "env-secret")
+        cfg = ConfigManager(config_path=tmp_path / "config.yaml")
+        assert cfg.encryption_key == b"env-secret"
+
+    def test_smtp_password_from_keyring(self, tmp_path, monkeypatch):
+        """SMTP password retrieved from keyring when available."""
+        monkeypatch.delenv("GHOSTBACKUP_SMTP_PASSWORD", raising=False)
+        fake = _FakeKeyring({("GhostBackup", "smtp_password"): "kr-smtp"})
+        monkeypatch.setattr(config_mod, "_keyring", fake)
+        cfg = ConfigManager(config_path=tmp_path / "config.yaml")
+        assert cfg.smtp_password == "kr-smtp"
+
+    def test_key_storage_method_keyring(self, tmp_path, monkeypatch):
+        """key_storage_method returns 'keyring' when keyring module is active."""
+        monkeypatch.setattr(config_mod, "_keyring", _FakeKeyring())
+        cfg = ConfigManager(config_path=tmp_path / "config.yaml")
+        assert cfg.key_storage_method == "keyring"
+
+    def test_key_storage_method_env(self, tmp_path, monkeypatch):
+        """key_storage_method returns 'env' when keyring is unavailable."""
+        monkeypatch.setattr(config_mod, "_keyring", None)
+        cfg = ConfigManager(config_path=tmp_path / "config.yaml")
+        assert cfg.key_storage_method == "env"

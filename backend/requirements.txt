@@ -24,6 +24,9 @@ watchdog==4.0.1
 # Rate limiting
 slowapi==0.1.9
 
+# Secure secret storage (Windows Credential Manager)
+keyring>=25.0.0
+
 # Utilities
 python-multipart==0.0.22
 

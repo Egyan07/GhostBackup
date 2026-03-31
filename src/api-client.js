@@ -98,7 +98,7 @@ export async function request(method, path, body, params) {
     let detail = res.statusText;
     try {
       const j = await res.json();
-      detail = j.detail || j.message || detail;
+      detail = j.detail?.message || j.detail || j.message || detail;
     } catch {
       // Response body was not JSON — use statusText as-is
     }
@@ -175,6 +175,9 @@ export const api = {
   watcherStatus:   ()            => request("GET",    "/watcher/status"),
   watcherStart:    ()            => request("POST",   "/watcher/start"),
   watcherStop:     ()            => request("POST",   "/watcher/stop"),
+
+  // Restore drills
+  drillStatus: () => request("GET", "/settings/drill-status"),
 
   // Encryption
   generateEncryptionKey: ()      => request("POST",   "/settings/encryption/generate-key"),

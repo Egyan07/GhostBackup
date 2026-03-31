@@ -656,6 +656,49 @@ class LocalSyncer:
             "errors":   errors[:50],
         }
 
+    def verify_files(self, file_records: list[dict]) -> dict:
+        """
+        Verify a specific list of file records against the SSD.
+        Used for startup spot-checks and targeted verification.
+        Returns {verified, failed, missing, errors}.
+        """
+        verified = 0
+        failed   = 0
+        missing  = 0
+        errors   = []
+        chunk    = self._config.chunk_size_bytes
+
+        for row in file_records:
+            bp   = row.get("backup_path", "")
+            xh   = row.get("xxhash", "")
+            name = row.get("name", "")
+
+            bp_path = Path(bp)
+            if not bp_path.exists():
+                missing += 1
+                errors.append({"file": name, "error": "Backup file missing from SSD"})
+                continue
+
+            try:
+                if self._crypto.enabled:
+                    actual_hash = self._crypto.decrypt_and_hash(bp_path)
+                else:
+                    actual_hash = _hash_file(bp_path, chunk)
+
+                if actual_hash != xh:
+                    failed += 1
+                    errors.append({
+                        "file":  name,
+                        "error": f"Hash mismatch (expected={xh[:8]}… got={actual_hash[:8]}…)",
+                    })
+                else:
+                    verified += 1
+            except (OSError, RuntimeError) as e:
+                failed += 1
+                errors.append({"file": name, "error": f"Verification error: {e}"})
+
+        return {"verified": verified, "failed": failed, "missing": missing, "errors": errors}
+
     # ── Pruning ───────────────────────────────────────────────────────────────
 
     def prune_old_backups(
@@ -663,10 +706,14 @@ class LocalSyncer:
         daily_days: int,
         weekly_days: int,
         guard_days: int,
-    ) -> int:
+    ) -> dict:
         guard_cutoff = datetime.now(timezone.utc) - timedelta(days=guard_days)
         daily_cutoff = datetime.now(timezone.utc) - timedelta(days=daily_days)
-        removed      = 0
+        immutable_cutoff = datetime.now(timezone.utc) - timedelta(
+            days=getattr(self._config, "immutable_days", 7)
+        )
+        removed           = 0
+        immutable_skipped = 0
 
         for source in self._config.get_enabled_sources():
             label     = source.get("label") or source.get("name", "")
@@ -679,6 +726,9 @@ class LocalSyncer:
                     f.get("started_at", datetime.now(timezone.utc).isoformat())
                 )
                 if backed_up > guard_cutoff:
+                    continue
+                if backed_up > immutable_cutoff:
+                    immutable_skipped += 1
                     continue
                 bp = Path(f["backup_path"])
                 if bp.exists():
@@ -697,8 +747,8 @@ class LocalSyncer:
                 ).strftime("%Y-%m-%d")
                 self._manifest.mark_run_pruned(date_str, next_day)
 
-        logger.info(f"Prune complete — {removed} files removed")
-        return removed
+        logger.info(f"Prune complete — {removed} files removed, {immutable_skipped} immutable skipped")
+        return {"removed": removed, "immutable_skipped": immutable_skipped}
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────

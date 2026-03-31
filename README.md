@@ -6,7 +6,7 @@
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
 ![Backend Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-472%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)
 ![GitHub issues](https://img.shields.io/github/issues/Egyan07/GhostBackup)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Egyan07/GhostBackup)
 ![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
@@ -111,6 +111,12 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | 🔔 Desktop Notifications | Windows toast notification on backup completion for all outcomes — success, partial, and failed. Joins existing SMTP alerts for full run visibility. |
 | 🌗 Dark/Light Theme | Toggle between dark (default) and light themes via the ☀️/🌙 button in the topbar. Choice persists across sessions via localStorage. |
 | 📤 Audit Log Export | Export full run history as a downloadable CSV from the Logs page. Backend `GET /runs/export` endpoint returns up to 10,000 runs. |
+| 🔐 Key Protection | Encryption keys stored in Windows Credential Manager (keyring). Automatic migration from `.env.local`. Env var fallback for CI. |
+| 🚀 Startup Self-Check | On launch, 5 random backup files are verified against the manifest. Critical alert on corruption. |
+| 🔒 Immutable Backups | Backups within the immutable window (default 7 days) cannot be deleted by any operation. |
+| 🧪 Restore Drill Tracking | Every restore is logged as a drill. Escalating reminders if no drill in 30/37/44 days. Audit-ready history. |
+| 🏥 Deep Health Check | `GET /health/deep` returns comprehensive system status for external uptime monitors. |
+| 🔢 Structured Errors | API errors include codes (GB-Exxx) with fix suggestions. Reference table in SETUP.md. |
 
 ---
 
@@ -311,8 +317,13 @@ All endpoints require the **X-API-Key header** except `/health`.
 | PATCH | /settings/retention | Update retention policy |
 | POST | /settings/prune | Manually trigger prune job |
 | POST | /settings/encryption/generate-key | Generate a new encryption key |
+| GET | /settings/drill-status | Restore drill status and history |
 
 **Monitoring**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /health/deep | Comprehensive health check for monitoring tools |
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

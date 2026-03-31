@@ -53,7 +53,7 @@ class ManifestDB:
 
     # ── Schema ────────────────────────────────────────────────────────────────
 
-    _SCHEMA_VERSION = 3
+    _SCHEMA_VERSION = 4
 
     def _migrate(self) -> None:
         with self._lock:
@@ -175,6 +175,22 @@ class ManifestDB:
                 )
                 self._conn.commit()
                 logger.info("DB migrated to schema v3")
+
+            if current < 4:
+                self._conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS restore_drills (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        due_date        TEXT NOT NULL,
+                        completed_at    TEXT,
+                        restore_run_id  INTEGER,
+                        notes           TEXT
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_drills_due
+                        ON restore_drills(due_date DESC);
+                """)
+                self._conn.execute("UPDATE schema_version SET version = 4")
+                self._conn.commit()
+                logger.info("DB migrated to schema v4 (restore_drills)")
 
     # ── WAL maintenance ────────────────────────────────────────────────────────
 
@@ -394,6 +410,34 @@ class ManifestDB:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM config_audit ORDER BY changed_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Restore drill tracking ───────────────────────────────────────────────
+
+    def record_drill(self, restore_run_id: int = None, notes: str = "") -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO restore_drills (due_date, completed_at, restore_run_id, notes) VALUES (?, ?, ?, ?)",
+                (now, now, restore_run_id, notes),
+            )
+            self._conn.commit()
+            return cur.lastrowid
+
+    def get_last_drill_completion(self) -> Optional[str]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT completed_at FROM restore_drills WHERE completed_at IS NOT NULL "
+                "ORDER BY completed_at DESC LIMIT 1"
+            ).fetchone()
+        return row["completed_at"] if row else None
+
+    def get_drill_history(self, limit: int = 12) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM restore_drills ORDER BY completed_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
         return [dict(r) for r in rows]

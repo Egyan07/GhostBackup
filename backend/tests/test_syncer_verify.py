@@ -113,3 +113,65 @@ class TestVerifyBackups:
         assert result["verified"] == 0
         assert result["missing"]  == 1
         assert any("missing" in e["error"].lower() for e in result["errors"])
+
+
+class TestVerifyFiles:
+    def test_verify_specific_files_all_ok(self, tmp_path):
+        ssd = tmp_path / "ssd"
+        ssd.mkdir()
+        backup_file = ssd / "doc.txt"
+        backup_file.write_bytes(b"hello world")
+        file_hash = _hash_file(backup_file)
+
+        cfg = _make_config(ssd_path=str(ssd))
+        mani = MagicMock()
+        s = LocalSyncer(config=cfg, manifest=mani)
+
+        file_records = [
+            {"backup_path": str(backup_file), "xxhash": file_hash, "name": "doc.txt"}
+        ]
+        result = s.verify_files(file_records)
+        assert result["verified"] == 1
+        assert result["failed"] == 0
+        assert result["missing"] == 0
+
+    def test_verify_specific_files_missing(self, tmp_path):
+        ssd = tmp_path / "ssd"
+        ssd.mkdir()
+
+        cfg = _make_config(ssd_path=str(ssd))
+        mani = MagicMock()
+        s = LocalSyncer(config=cfg, manifest=mani)
+
+        file_records = [
+            {"backup_path": str(ssd / "gone.txt"), "xxhash": "abc123", "name": "gone.txt"}
+        ]
+        result = s.verify_files(file_records)
+        assert result["verified"] == 0
+        assert result["missing"] == 1
+
+    def test_verify_specific_files_corrupt(self, tmp_path):
+        ssd = tmp_path / "ssd"
+        ssd.mkdir()
+        backup_file = ssd / "doc.txt"
+        backup_file.write_bytes(b"corrupted content")
+
+        cfg = _make_config(ssd_path=str(ssd))
+        mani = MagicMock()
+        s = LocalSyncer(config=cfg, manifest=mani)
+
+        file_records = [
+            {"backup_path": str(backup_file), "xxhash": "wrong_hash", "name": "doc.txt"}
+        ]
+        result = s.verify_files(file_records)
+        assert result["failed"] == 1
+
+    def test_verify_empty_list(self, tmp_path):
+        cfg = _make_config(ssd_path=str(tmp_path))
+        mani = MagicMock()
+        s = LocalSyncer(config=cfg, manifest=mani)
+
+        result = s.verify_files([])
+        assert result["verified"] == 0
+        assert result["failed"] == 0
+        assert result["missing"] == 0

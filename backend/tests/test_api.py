@@ -18,6 +18,8 @@ from fastapi.testclient import TestClient
 def _make_config():
     cfg = MagicMock()
     cfg.ssd_path = "/tmp/test_ssd"
+    cfg.secondary_ssd_path = None
+    cfg.key_storage_method = "env"
     cfg.get_enabled_sources.return_value = []
     cfg.to_dict_safe.return_value = {"ssd_path": "/tmp/test_ssd", "sources": []}
     cfg.concurrency = 2
@@ -38,6 +40,8 @@ def _make_manifest():
     m.get_files.return_value = []
     m.get_config_audit.return_value = []
     m.create_run.return_value = 1
+    m.get_latest_successful_run.return_value = None
+    m.get_last_drill_completion.return_value = None
     return m
 
 
@@ -621,3 +625,85 @@ class TestVerifyEndpoint:
         data = r.json()
         assert "verified" in data
         assert "source" in data
+
+
+class TestStructuredErrors:
+    def test_verify_during_backup_returns_error_code(self, client):
+        client._api._active_run = {"status": "running"}
+        r = client.post("/verify")
+        assert r.status_code == 409
+        detail = r.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["code"] == "GB-E060"
+        assert "fix" in detail
+
+    def test_prune_during_backup_returns_error_code(self, client):
+        client._api._active_run = {"status": "running"}
+        r = client.post("/settings/prune")
+        assert r.status_code == 409
+        detail = r.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["code"] == "GB-E061"
+        assert "fix" in detail
+
+    def test_concurrent_run_returns_error_code(self, client):
+        client._api._active_run = {"status": "running"}
+        r = client.post("/run/start", json={})
+        assert r.status_code == 409
+        detail = r.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["code"] == "GB-E020"
+        assert "fix" in detail
+
+    def test_restore_failed_run_returns_error_code(self, client):
+        import api as api_module
+        api_module._manifest.get_run.return_value = {"run_id": 1, "status": "failed"}
+        r = client.post("/restore", json={
+            "run_id": 1, "library": "Clients",
+            "destination": "C:\\Restore", "dry_run": True,
+        })
+        assert r.status_code == 400
+        detail = r.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["code"] == "GB-E040"
+
+    def test_restore_no_files_returns_error_code(self, client):
+        import api as api_module
+        api_module._manifest.get_run.return_value = {"run_id": 1, "status": "success"}
+        api_module._manifest.get_files.return_value = []
+        r = client.post("/restore", json={
+            "run_id": 1, "library": "Empty",
+            "destination": "C:\\Restore", "dry_run": True,
+        })
+        assert r.status_code == 404
+        detail = r.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["code"] == "GB-E041"
+
+
+# ── /health/deep ──────────────────────────────────────────────────────────────
+
+class TestHealthDeep:
+    def test_deep_health_returns_all_fields(self, client):
+        r = client.get("/health/deep")
+        assert r.status_code == 200
+        data = r.json()
+        expected_keys = {
+            "ssd_connected", "ssd_free_gb", "last_backup_age_hours",
+            "last_backup_status", "encryption_active", "key_storage",
+            "manifest_ok", "manifest_size_mb", "spot_check",
+            "scheduler_running", "next_backup", "restore_drill_overdue",
+            "restore_drill_days_remaining", "version", "overall",
+        }
+        assert expected_keys.issubset(set(data.keys()))
+
+    def test_deep_health_overall_field(self, client):
+        r = client.get("/health/deep")
+        assert r.json()["overall"] in ("healthy", "degraded", "unhealthy")
+
+    def test_deep_health_spot_check_structure(self, client):
+        r = client.get("/health/deep")
+        sc = r.json()["spot_check"]
+        assert "checked" in sc
+        assert "passed" in sc
+        assert "failed" in sc

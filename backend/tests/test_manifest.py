@@ -352,3 +352,39 @@ def test_schema_migration_idempotent(tmp_path):
 def test_db_path_property(tmp_path):
     db = ManifestDB(tmp_path / "test.db")
     assert db.db_path == tmp_path / "test.db"
+
+
+# ── Restore drills ───────────────────────────────────────────────────────────
+
+class TestRestoreDrills:
+
+    def test_record_drill(self, db):
+        drill_id = db.record_drill(restore_run_id=1, notes="test drill")
+        assert drill_id > 0
+
+    def test_get_last_drill_completion_none(self, db):
+        result = db.get_last_drill_completion()
+        assert result is None
+
+    def test_get_last_drill_completion_after_record(self, db):
+        db.record_drill(notes="first drill")
+        result = db.get_last_drill_completion()
+        assert result is not None
+        # Should be a valid ISO timestamp
+        from datetime import datetime
+        datetime.fromisoformat(result)
+
+    def test_get_drill_history(self, db):
+        db.record_drill(notes="drill 1")
+        db.record_drill(notes="drill 2")
+        db.record_drill(notes="drill 3")
+        history = db.get_drill_history(limit=12)
+        assert isinstance(history, list)
+        assert len(history) == 3
+        # Most recent first (reverse chronological)
+        assert history[0]["notes"] == "drill 3"
+        assert history[-1]["notes"] == "drill 1"
+
+    def test_schema_v4_migration(self, db):
+        row = db._conn.execute("SELECT version FROM schema_version").fetchone()
+        assert row[0] >= 4
