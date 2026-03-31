@@ -22,7 +22,7 @@ All notable changes to GhostBackup are documented here.
 - **E2E integration test** (`test_e2e_pipeline.py`): Full backup → verify → restore → byte-compare pipeline test with real encryption. 3 test variants.
 
 ### Testing
-- **365 backend tests passing** (up from 338)
+- **480 tests passing** — 338 backend + 142 frontend (up from 338 + 134)
 
 ---
 
