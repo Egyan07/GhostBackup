@@ -128,7 +128,7 @@ Before adopting GhostBackup, understand what it **does not** do:
 |------------|--------|
 | **Windows only** | Requires Windows 10/11. No Linux or macOS support. |
 | **Local drives only** | Backs up to directly attached drives (internal/external SSDs). No cloud, NAS, or network share support. |
-| **No offsite copy** | GhostBackup handles local redundancy only. Offsite backup is your responsibility. |
+| **No offsite copy** | GhostBackup handles local redundancy only. Offsite backup is your responsibility — see [OFFSITE.md](OFFSITE.md) for simple options using your existing tools. |
 | **No deduplication** | Changed files are copied in full on each backup run. No block-level or byte-level dedup. |
 | **Single machine** | No multi-user or networked deployment. If the machine is offline, no backup runs. |
 | **Files only** | Restores individual files/folders — not OS images. Pair with Macrium Reflect Free for full system recovery. |
@@ -489,7 +489,7 @@ Open a GitHub issue or contact the author directly. Do not include exploit detai
 - **GDPR:** If backing up personal data, conduct your own data protection impact assessment. Consider how right-to-erasure requests interact with long-term retention.
 - **Key management:** Back up your encryption key securely. If lost, all encrypted backups are permanently unrecoverable.
 - **Restore testing:** Periodically verify you can actually restore from backups. GhostBackup provides the tools — you must verify they work for your data.
-- **Offsite copy:** GhostBackup handles local redundancy only. You are responsible for maintaining an offsite copy.
+- **Offsite copy:** GhostBackup handles local redundancy only. You are responsible for maintaining an offsite copy — see [OFFSITE.md](OFFSITE.md) for recommended approaches.
 
 ---
 
