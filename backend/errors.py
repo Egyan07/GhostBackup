@@ -4,6 +4,7 @@ Each error has a code (GB-Exxx), a human-readable message, and a fix suggestion.
 """
 
 from dataclasses import dataclass
+from typing import Optional
 from fastapi import HTTPException
 
 
@@ -36,7 +37,7 @@ ERRORS: dict[str, GBError] = {
 }
 
 
-def raise_gb(code: str, status: int = 400, detail_override: str = None) -> None:
+def raise_gb(code: str, status: int = 400, detail_override: Optional[str] = None) -> None:
     err = ERRORS[code]
     raise HTTPException(
         status_code=status,

@@ -201,7 +201,7 @@ class ManifestDB:
 
     # ── Run lifecycle ─────────────────────────────────────────────────────────
 
-    def create_run(self, full_backup: bool = False) -> int:
+    def create_run(self, full_backup: bool = False) -> Optional[int]:
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO runs (started_at, status, full_backup) VALUES (?, 'running', ?)",
@@ -416,7 +416,7 @@ class ManifestDB:
 
     # ── Restore drill tracking ───────────────────────────────────────────────
 
-    def record_drill(self, restore_run_id: int = None, notes: str = "") -> int:
+    def record_drill(self, restore_run_id: Optional[int] = None, notes: str = "") -> Optional[int]:
         now = datetime.now(timezone.utc).isoformat()
         with self._lock:
             cur = self._conn.execute(

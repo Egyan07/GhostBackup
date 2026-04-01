@@ -4,6 +4,23 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v3.1.0 — CI Hardening & Windows Installer
+
+### CI/CD
+- **Coverage gates enforced**: backend 90% (`--cov-fail-under=90`), frontend 60% statements. CI fails if coverage drops.
+- **Dedicated E2E job**: API-level integration tests (health → backup → verify) run as a separate CI job after unit tests pass.
+- **Coverage artifacts**: backend and frontend coverage reports uploaded as CI artifacts (7-day retention).
+- **mypy type checking**: core backend modules (`api.py`, `syncer.py`, `config.py`, `manifest.py`) checked in CI with gradual typing config.
+
+### Distribution
+- **Windows NSIS installer**: `build.yml` workflow builds a one-click Windows installer on version tags (`v*`). Installer uploaded as GitHub Release asset automatically.
+
+### Testing
+- **API-level E2E test**: `test_e2e_ci.py` boots the real FastAPI app with TestClient against a temp config — tests the full health → config → backup → verify cycle with no mocks on core path.
+- **510 tests passing** — 368 backend + 142 frontend
+
+---
+
 ## v3.0.0 — Security, Monitoring & Compliance
 
 ### Security

@@ -6,7 +6,7 @@
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
 ![Backend Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-480%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-510%20passing-brightgreen)
 ![GitHub issues](https://img.shields.io/github/issues/Egyan07/GhostBackup)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Egyan07/GhostBackup)
 ![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
@@ -128,7 +128,7 @@ Before adopting GhostBackup, understand what it **does not** do:
 |------------|--------|
 | **Windows only** | Requires Windows 10/11. No Linux or macOS support. |
 | **Local drives only** | Backs up to directly attached drives (internal/external SSDs). No cloud, NAS, or network share support. |
-| **No offsite copy** | GhostBackup handles local redundancy only. Offsite backup is your responsibility — see [OFFSITE.md](OFFSITE.md) for simple options using your existing tools. |
+| **No offsite copy** | GhostBackup handles local redundancy only. Offsite backup is your responsibility. |
 | **No deduplication** | Changed files are copied in full on each backup run. No block-level or byte-level dedup. |
 | **Single machine** | No multi-user or networked deployment. If the machine is offline, no backup runs. |
 | **Files only** | Restores individual files/folders — not OS images. Pair with Macrium Reflect Free for full system recovery. |
@@ -143,7 +143,11 @@ Before adopting GhostBackup, understand what it **does not** do:
 
 ## 🚀 Quick Start
 
-**Windows guided setup (~5 minutes):**
+**Option A — Download the installer (recommended):**
+
+Download `GhostBackup-Setup.exe` from the [latest GitHub Release](https://github.com/Egyan07/GhostBackup/releases/latest) and run it. The installer bundles everything — no prerequisites needed.
+
+**Option B — Build from source (~5 minutes):**
 
 ### Prerequisites
 
@@ -489,7 +493,7 @@ Open a GitHub issue or contact the author directly. Do not include exploit detai
 - **GDPR:** If backing up personal data, conduct your own data protection impact assessment. Consider how right-to-erasure requests interact with long-term retention.
 - **Key management:** Back up your encryption key securely. If lost, all encrypted backups are permanently unrecoverable.
 - **Restore testing:** Periodically verify you can actually restore from backups. GhostBackup provides the tools — you must verify they work for your data.
-- **Offsite copy:** GhostBackup handles local redundancy only. You are responsible for maintaining an offsite copy — see [OFFSITE.md](OFFSITE.md) for recommended approaches.
+- **Offsite copy:** GhostBackup handles local redundancy only. You are responsible for maintaining an offsite copy.
 
 ---
 

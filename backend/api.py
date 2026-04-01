@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import uvicorn
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
@@ -65,27 +65,27 @@ _limiter = Limiter(key_func=get_remote_address)
 
 # ── Dependency providers ──────────────────────────────────────────────────────
 
-def provide_config() -> ConfigManager:
+def provide_config() -> Optional[ConfigManager]:
     return _config
 
 
-def get_manifest() -> ManifestDB:
+def get_manifest() -> Optional[ManifestDB]:
     return _manifest
 
 
-def get_scheduler() -> BackupScheduler:
+def get_scheduler() -> Optional[BackupScheduler]:
     return _scheduler
 
 
-def get_reporter() -> Reporter:
+def get_reporter() -> Optional[Reporter]:
     return _reporter
 
 
-def get_syncer() -> LocalSyncer:
+def get_syncer() -> Optional[LocalSyncer]:
     return _syncer
 
 
-def get_watcher() -> FileWatcher:
+def get_watcher() -> Optional[FileWatcher]:
     return _watcher
 
 
@@ -228,7 +228,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="3.0.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="3.1.0", lifespan=lifespan)
 
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
@@ -349,12 +349,12 @@ def _new_run_state(run_id: int, full: bool) -> dict:
 
 async def run_backup_job(
     full: bool = False,
-    sources: list[str] = None,
-    cfg: ConfigManager = None,
-    manifest: ManifestDB = None,
-    reporter: Reporter = None,
-    syncer: LocalSyncer = None,
-    scheduler: BackupScheduler = None,
+    sources: Optional[list[str]] = None,
+    cfg: Optional[ConfigManager] = None,
+    manifest: Optional[ManifestDB] = None,
+    reporter: Optional[Reporter] = None,
+    syncer: Optional[LocalSyncer] = None,
+    scheduler: Optional[BackupScheduler] = None,
 ) -> None:
     global _active_run
     # Fall back to module-level globals when called from the scheduler
@@ -364,6 +364,7 @@ async def run_backup_job(
     reporter = reporter or _reporter
     syncer   = syncer   or _syncer
     scheduler = scheduler or _scheduler
+    assert cfg is not None and manifest is not None and reporter is not None and syncer is not None
 
     with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
@@ -381,6 +382,7 @@ async def run_backup_job(
             return
 
         run_id      = manifest.create_run(full_backup=full)
+        assert run_id is not None
         _active_run = _new_run_state(run_id, full)
 
     if scheduler:
@@ -413,7 +415,7 @@ async def run_backup_job(
                     }
                     continue
 
-                lib_state = {
+                lib_state: dict[str, Any] = {
                     "status":            "running",
                     "pct":               0,
                     "files_transferred": 0,
@@ -427,7 +429,7 @@ async def run_backup_job(
                     loop = asyncio.get_running_loop()
                     changed_files, skipped = await loop.run_in_executor(
                         executor,
-                        lambda s=source, f=full: syncer.scan_source(s, force_full=f),
+                        lambda s=source, f=full: syncer.scan_source(s, force_full=f),  # type: ignore[misc]
                     )
                     with _run_mutex:
                         _active_run["files_skipped"] += skipped
@@ -463,7 +465,7 @@ async def run_backup_job(
                         try:
                             backup_path = await loop.run_in_executor(
                                 executor,
-                                lambda fm=file_meta: syncer.copy_file(
+                                lambda fm=file_meta: syncer.copy_file(  # type: ignore[misc]
                                     fm, run_id, on_progress=_progress_cb
                                 ),
                             )
@@ -592,14 +594,16 @@ async def run_backup_job(
 
 async def _retry_locked_files(
     run_id: int,
-    cfg: "ConfigManager" = None,
-    syncer: "LocalSyncer" = None,
-    manifest: "ManifestDB" = None,
+    cfg: Optional["ConfigManager"] = None,
+    syncer: Optional["LocalSyncer"] = None,
+    manifest: Optional["ManifestDB"] = None,
 ) -> None:
     """Attempt a second pass on files that failed due to locking."""
     cfg      = cfg      or _config
     syncer   = syncer   or _syncer
     manifest = manifest or _manifest
+    assert cfg is not None and syncer is not None and manifest is not None
+    assert _active_run is not None
 
     locked = [
         e for e in _active_run.get("errors", [])
@@ -644,7 +648,7 @@ async def _retry_locked_files(
 
         try:
             backup_path = await loop.run_in_executor(
-                None, lambda fm=file_meta: syncer.copy_file(fm, run_id)
+                None, lambda fm=file_meta: syncer.copy_file(fm, run_id)  # type: ignore[misc]
             )
             manifest.record_file(run_id, file_meta, backup_path)
             with _run_mutex:
@@ -660,8 +664,8 @@ async def _retry_locked_files(
 
 
 async def _backup_manifest_to_ssd(
-    cfg: "ConfigManager" = None,
-    manifest: "ManifestDB" = None,
+    cfg: Optional["ConfigManager"] = None,
+    manifest: Optional["ManifestDB"] = None,
 ) -> None:
     """Copy the manifest database to the SSD after every successful run.
 
@@ -670,6 +674,7 @@ async def _backup_manifest_to_ssd(
     """
     cfg      = cfg      or _config
     manifest = manifest or _manifest
+    assert cfg is not None and manifest is not None
     if not cfg.ssd_path:
         return
     try:
@@ -770,7 +775,7 @@ async def health_deep(request: Request,
 
     # Manifest
     manifest_ok = True
-    manifest_size_mb = 0
+    manifest_size_mb: float = 0.0
     try:
         manifest_size_mb = round(manifest.db_path.stat().st_size / (1024 * 1024), 1)
     except Exception:
@@ -938,6 +943,7 @@ async def update_config(req: ConfigUpdateRequest,
     if "schedule_time" in updates or "timezone" in updates:
         scheduler.reschedule(cfg.schedule_time, cfg.timezone)
     global _syncer
+    assert _manifest is not None
     _syncer = LocalSyncer(cfg, _manifest)
     if watcher_enabled is True and watcher and not watcher.is_running:
         watcher.reload_sources()
@@ -1065,7 +1071,7 @@ async def restore(request: Request, req: RestoreRequest, background_tasks: Backg
 @_limiter.limit("5/minute")
 async def verify_backups(request: Request,
                          source_label: Optional[str] = None,
-                         syncer: LocalSyncer = Depends(get_syncer)):
+                         syncer: Optional[LocalSyncer] = Depends(get_syncer)):
     """
     Re-reads backed-up files and verifies hashes against the manifest.
     Run manually or schedule weekly to catch SSD corruption early.
@@ -1074,14 +1080,17 @@ async def verify_backups(request: Request,
     if _active_run and _active_run.get("status") == "running":
         raise_gb("GB-E060", 409)
 
+    active_syncer = syncer or _syncer
+    assert active_syncer is not None
     loop   = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None,
-        lambda: (syncer or _syncer).verify_backups(source_label),
+        lambda: active_syncer.verify_backups(source_label),
     )
-    level = "error" if (result["failed"] or result["missing"]) else "info"
+    alert_level: Any = "error" if (result["failed"] or result["missing"]) else "info"
+    assert _reporter is not None
     _reporter.alerts.add(
-        level,
+        alert_level,
         "Backup verification complete",
         f"{result['verified']} OK, {result['failed']} corrupt, {result['missing']} missing.",
     )

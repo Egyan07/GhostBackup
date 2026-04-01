@@ -11,17 +11,17 @@ import os
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Optional
+from typing import Any, List, Optional
 from zoneinfo import available_timezones
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("config")
 
-_keyring = None
+_keyring: Any = None
 try:
-    import keyring as _keyring
+    import keyring as _keyring  # type: ignore[import-untyped]
     logger.info("Keyring available — secrets can use Windows Credential Manager")
 except ImportError:
     logger.info("Keyring not installed — using environment variables for secrets")
@@ -109,7 +109,7 @@ class ConfigManager:
 
     def __init__(self, config_path: Path = CONFIG_PATH):
         self._path = config_path
-        self._data: dict = deepcopy(DEFAULTS)
+        self._data: dict[str, Any] = deepcopy(DEFAULTS)
         self._manifest_ref = None
         self._load()
         logger.info(f"Config loaded from {self._path}")
@@ -443,7 +443,7 @@ class ConfigManager:
             ):
                 raise ValueError("exclude_patterns must be a list of strings")
 
-    def update(self, updates: dict) -> None:
+    def update(self, updates: dict) -> List[str]:
         """
         Apply a flat update dict and log each changed field to the audit trail.
         Unknown keys are silently ignored.
