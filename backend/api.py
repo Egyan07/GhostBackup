@@ -36,7 +36,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import ConfigManager
 from manifest import ManifestDB
-from reporter import Reporter
+from reporter import Reporter, AlertLevel
 from scheduler import BackupScheduler
 from syncer import LocalSyncer, get_ssd_status
 from watcher import FileWatcher
@@ -195,7 +195,7 @@ async def lifespan(app: FastAPI):
                 status = get_ssd_status(_config.ssd_path)
                 current = status.get("status")
                 if last_status is not None and current != last_status:
-                    level = "warn" if current == "ok" else "error"
+                    level: AlertLevel = "warn" if current == "ok" else "error"
                     await _reporter.alert_and_notify(
                         level=level,
                         title="SSD status changed",

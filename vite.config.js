@@ -27,5 +27,25 @@ export default defineConfig({
     environment: "jsdom",
     include: ["tests/**/*.test.{js,jsx}"],
     setupFiles: ["tests/setup.js"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      reportsDirectory: "./coverage",
+      // Only measure coverage on files that have tests written for them
+      include: [
+        "api-client.js",
+        "components/**/*.{js,jsx}",
+        "pages/**/*.{js,jsx}",
+      ],
+      // Exclude files that are Electron/app shell (no unit tests expected)
+      exclude: [
+        "main.jsx",
+        "GhostBackup.jsx",
+        "splash.css",
+        "styles.css",
+        "index.html",
+        "tests/**",
+      ],
+    },
   },
 });

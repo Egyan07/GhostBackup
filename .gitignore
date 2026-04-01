@@ -61,3 +61,6 @@ htmlcov/
 
 # Internal tooling — not for release
 docs/
+
+# mypy type check cache
+backend/.mypy_cache/
