@@ -27,12 +27,6 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 
 ## ⚔️ How GhostBackup Compares
 
-<details>
-<summary><b>View Detailed Comparison & Features</b></summary>
-
-<details>
-<summary><b>View Detailed Comparison & Features</b></summary>
-
 | Feature | GhostBackup | Backblaze B2 | Veeam Free | IDrive |
 |---------|:-----------:|:------------:|:----------:|:------:|
 | AES-256-GCM encryption | ✅ | ✅ | ❌ | ✅ |
@@ -47,8 +41,6 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | Open source | ✅ | ❌ | ❌ | ❌ |
 | Windows native | ✅ | ✅ | ✅ | ✅ |
 | Rate-limited REST API | ✅ | N/A | ❌ | ❌ |
-
-</details>
 
 > GhostBackup is purpose-built for small businesses that need real encryption, real audit trails, and zero recurring cost — without the complexity of enterprise backup suites.
 
@@ -102,7 +94,31 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 
 ---
 
-## ✨ Features
+## ✨ Core Features
+
+### 🛡️ Security & Privacy
+| Feature | Description |
+|---------|-------------|
+| 🔐 Encryption at Rest | AES-256-GCM streaming encryption via Python `cryptography` library. Constant memory usage. Per-file random nonce. |
+| 🔒 API Security | Session token per launch via `crypto.randomBytes(32)`. HMAC-verified timing-safe comparisons. |
+| 💾 Dual-SSD Redundancy | Primary and secondary SSD support for local 3-2-1 compliance. See [OFFSITE.md](OFFSITE.md). |
+| 🛡️ Immutability | Recent backups are protected from deletion for a minimum of 7 days. |
+
+### 📊 Monitoring & Auditability
+| Feature | Description |
+|---------|-------------|
+| ✅ Integrity Verification | On-demand xxhash verification of all backups. Automatic spot-checks on startup. |
+| 📋 Restore Drill Tracking | Automatically records restore attempts to meet professional audit requirements. |
+| 📧 SMTP Alerts | Failure notifications via SMTP with actionable fix suggestions. |
+| 📝 Audit Logs | Detailed run history and alert logs persisted in an immutable SQLite database. |
+
+### ⚡ Performance & UX
+| Feature | Description |
+|---------|-------------|
+| ⏰ Scheduled Backups | Daily automated backups via APScheduler with configurable timezone support. |
+| 👁️ Real-Time Watching | Watchdog-based file system monitor for instant incremental sync. |
+| 🧪 Dry-Run Restore | Preview exactly which files will be restored before writing to disk. |
+| 🧹 Automated Pruning | Smart retention policy (daily/weekly/yearly) to manage SSD space automatically. |
 
 | Feature | Description |
 |---------|-------------|
@@ -151,11 +167,25 @@ Before adopting GhostBackup, understand what it **does not** do:
 
 ## 🚀 Quick Start
 
-**Option A — Download the installer (Recommended for end users):**
+### Option A — Automated Setup (Recommended)
 
-Download **`GhostBackup-Setup.exe`** from the [latest GitHub Release](https://github.com/Egyan07/GhostBackup/releases/latest) and run it. The installer bundles all dependencies (Python, Node.js) and sets up the app automatically.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Egyan07/GhostBackup.git
+   cd GhostBackup
+   ```
 
-**Option B — Build from source (~5 minutes):**
+2. Run the guided installer:
+   ```
+   install.bat
+   ```
+
+3. Launch GhostBackup:
+   ```
+   start.bat
+   ```
+
+### Option B — Manual Setup (~5 minutes):
 
 ### Prerequisites
 
@@ -205,7 +235,7 @@ Download **`GhostBackup-Setup.exe`** from the [latest GitHub Release](https://gi
 ## 🧪 Testing
 
 ```bash
-# Backend — 338 tests, 90% line coverage
+# Backend — 368 tests, 90% line coverage
 cd backend
 python -m pytest tests/ -v --cov=. --cov-report=term-missing
 
@@ -440,7 +470,7 @@ GhostBackup/
 │   ├── splash.css           ← splash/loading screen styles
 │   ├── components/          ← reusable UI components
 │   ├── pages/               ← full-page views (Dashboard, Restore, Settings, etc.)
-│   └── tests/               ← 142 vitest tests
+│   └── tests/               ← 142 vitest tests (510 total with backend)
 │
 ├── screenshots/             ← README screenshots
 ├── OFFSITE.md               ← offsite backup guide
