@@ -100,16 +100,19 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | Feature | Description |
 |---------|-------------|
 | 🔐 Encryption at Rest | AES-256-GCM streaming encryption via Python `cryptography` library. Constant memory usage. Per-file random nonce. |
+| 🔐 Key Protection | Encryption keys stored in Windows Credential Manager (keyring). Automatic migration from `.env.local`. |
 | 🔒 API Security | Session token per launch via `crypto.randomBytes(32)`. HMAC-verified timing-safe comparisons. |
+| 🛡️ Ransomware Proof | Write-once-read-many (WORM) logic for the immutable window (7 days). |
 | 💾 Dual-SSD Redundancy | Primary and secondary SSD support for local 3-2-1 compliance. See [OFFSITE.md](OFFSITE.md). |
-| 🛡️ Immutability | Recent backups are protected from deletion for a minimum of 7 days. |
 
 ### 📊 Monitoring & Auditability
 | Feature | Description |
 |---------|-------------|
 | ✅ Integrity Verification | On-demand xxhash verification of all backups. Automatic spot-checks on startup. |
-| 📋 Restore Drill Tracking | Automatically records restore attempts to meet professional audit requirements. |
-| 📧 SMTP Alerts | Failure notifications via SMTP with actionable fix suggestions. |
+| 🚀 Startup Self-Check | On launch, 5 random backup files are verified against the manifest. Critical alert on corruption. |
+| 🧪 Restore Drill Tracking | Every restore is logged as a drill. Escalating reminders if no drill in 30/37/44 days. Audit-ready history. |
+| 📧 Email Alerts | SMTP-based failure alerts and run summaries. Supports Gmail App Passwords and standard SMTP providers. |
+| 🔔 Desktop Notifications | Windows toast notification on backup completion for all outcomes — success, partial, and failed. |
 | 📝 Audit Logs | Detailed run history and alert logs persisted in an immutable SQLite database. |
 
 ### ⚡ Performance & UX
@@ -119,6 +122,15 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | 👁️ Real-Time Watching | Watchdog-based file system monitor for instant incremental sync. |
 | 🧪 Dry-Run Restore | Preview exactly which files will be restored before writing to disk. |
 | 🧹 Automated Pruning | Smart retention policy (daily/weekly/yearly) to manage SSD space automatically. |
+| 🌗 Dark/Light Theme | Toggle between dark (default) and light themes. Choice persists via localStorage. |
+
+### 🛠️ Developer & Admin Tools
+| Feature | Description |
+|---------|-------------|
+| 📋 SQLite Backend | Full backup history and per-file status stored in a local SQLite database. |
+| 📤 Audit Log Export | Export full run history as a downloadable CSV from the Logs page. |
+| 🏥 Deep Health Check | `GET /health/deep` returns comprehensive system status for monitors. |
+| 🔢 Structured Errors | API errors include codes (GB-Exxx) with actionable fix suggestions. |
 
 | Feature | Description |
 |---------|-------------|
@@ -167,7 +179,13 @@ Before adopting GhostBackup, understand what it **does not** do:
 
 ## 🚀 Quick Start
 
-### Option A — Automated Setup (Recommended)
+### Option A — Download Installer (Recommended)
+
+1. Download the latest `GhostBackup_Setup.exe` from the **[Releases](https://github.com/Egyan07/GhostBackup/releases)** page.
+2. Run the installer and follow the on-screen prompts.
+3. Launch GhostBackup from your desktop or start menu.
+
+### Option B — Automated Setup (From Source)
 
 1. Clone the repository:
    ```bash
@@ -185,7 +203,7 @@ Before adopting GhostBackup, understand what it **does not** do:
    start.bat
    ```
 
-### Option B — Manual Setup (~5 minutes):
+### Option C — Manual Setup (~5 minutes):
 
 ### Prerequisites
 
