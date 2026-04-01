@@ -132,28 +132,6 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | 🏥 Deep Health Check | `GET /health/deep` returns comprehensive system status for monitors. |
 | 🔢 Structured Errors | API errors include codes (GB-Exxx) with actionable fix suggestions. |
 
-| Feature | Description |
-|---------|-------------|
-| 🔐 Encryption at Rest | AES-256-GCM streaming encryption via Python `cryptography` library. Constant memory usage regardless of file size. Per-file random nonce. Versioned encryption header for future key rotation. Per-installation HKDF salt for stronger key isolation. |
-| 🔒 API Security | Auto-generated session token per launch via `crypto.randomBytes(32)`. All endpoints authenticated via `X-API-Key` header with timing-safe comparison (`hmac.compare_digest`). Rate limiting on sensitive endpoints (slowapi). |
-| 💾 Dual-SSD Redundancy | Primary and secondary SSD support. Combined with the original source, this gives you 3 copies across 2 drives. Offsite copy is your responsibility — GhostBackup handles the local copies. |
-| ⏰ Scheduled Backups | Daily automated backups via APScheduler with configurable time and timezone. |
-| 👁️ Real-Time File Watching | Watchdog-based file system monitor. Detects changes and triggers incremental backup (15s debounce, 120s cooldown between triggers). Orphaned temp files from interrupted runs are cleaned up on startup. |
-| 🛑 Failure Threshold Abort | If more than 5% of files fail during a library run (minimum 3 failures), that library is aborted. Other libraries continue. Threshold is configurable. |
-| ✅ Integrity Verification | `/verify` endpoint re-hashes every backed-up file using xxhash and compares against stored checksums. Returns verified/corrupt/missing counts directly to the UI. |
-| 📚 Audit Trail | Every configuration change is logged with UTC timestamp and hostname. Full backup history with per-file status stored in SQLite. Config updates surface unknown/ignored keys in the API response. |
-| 📧 Email Alerts | SMTP-based failure alerts and run summaries. Supports Gmail App Passwords and standard SMTP providers. |
-| 🔢 Config Validation | All writable config fields validated on update — schedule time (HH:MM), IANA timezone, numeric ranges, type checks. Invalid values return HTTP 400 before any write. |
-| 🔔 Desktop Notifications | Windows toast notification on backup completion for all outcomes — success, partial, and failed. Joins existing SMTP alerts for full run visibility. |
-| 🌗 Dark/Light Theme | Toggle between dark (default) and light themes via the ☀️/🌙 button in the topbar. Choice persists across sessions via localStorage. |
-| 📤 Audit Log Export | Export full run history as a downloadable CSV from the Logs page. Backend `GET /runs/export` endpoint returns up to 10,000 runs. |
-| 🔐 Key Protection | Encryption keys stored in Windows Credential Manager (keyring). Automatic migration from `.env.local`. Env var fallback for CI. |
-| 🚀 Startup Self-Check | On launch, 5 random backup files are verified against the manifest. Critical alert on corruption. |
-| 🔒 Immutable Backups | Backups within the immutable window (default 7 days) cannot be deleted by any operation. |
-| 🧪 Restore Drill Tracking | Every restore is logged as a drill. Escalating reminders if no drill in 30/37/44 days. Audit-ready history. |
-| 🏥 Deep Health Check | `GET /health/deep` returns comprehensive system status for external uptime monitors. |
-| 🔢 Structured Errors | API errors include codes (GB-Exxx) with fix suggestions. Reference table in SETUP.md. |
-
 ---
 
 ## ⚠️ Limitations
