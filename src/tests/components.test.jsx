@@ -53,6 +53,43 @@ describe("ErrBanner", () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it("renders structured error objects with code and message", () => {
+    const err = { code: "GB-E001", message: "Key missing" };
+    render(<ErrBanner error={err} />);
+    expect(screen.getByText("GB-E001")).toBeTruthy();
+    expect(screen.getByText("Key missing")).toBeTruthy();
+  });
+
+  it("renders fix suggestion when provided in error object", () => {
+    const err = { message: "Error", fix: "Check settings" };
+    render(<ErrBanner error={err} />);
+    expect(screen.getByText("Fix: Check settings")).toBeTruthy();
+  });
+
+  it("handles error objects without code or fix gracefully", () => {
+    const err = { message: "Simple error object" };
+    render(<ErrBanner error={err} />);
+    expect(screen.getByText("Simple error object")).toBeTruthy();
+    expect(screen.queryByText("Fix:")).toBeNull();
+  });
+
+  it("shows warning icon on error", () => {
+    render(<ErrBanner error="err" />);
+    expect(screen.getByText("⚠")).toBeTruthy();
+  });
+
+  it("applies mono font style to error code", () => {
+    const err = { code: "CODE123", message: "Msg" };
+    render(<ErrBanner error={err} />);
+    const codeElement = screen.getByText("CODE123");
+    expect(codeElement.style.fontFamily).toContain("mono");
+  });
+
+  it("renders string representation of error object if message is missing", () => {
+    render(<ErrBanner error={{ foo: "bar" }} />);
+    expect(screen.getByText("[object Object]")).toBeTruthy();
+  });
+
   it("displays the warning icon", () => {
     render(<ErrBanner error="Test error" />);
     expect(screen.getByText("⚠")).toBeTruthy();

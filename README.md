@@ -27,6 +27,12 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 
 ## ⚔️ How GhostBackup Compares
 
+<details>
+<summary><b>View Detailed Comparison & Features</b></summary>
+
+<details>
+<summary><b>View Detailed Comparison & Features</b></summary>
+
 | Feature | GhostBackup | Backblaze B2 | Veeam Free | IDrive |
 |---------|:-----------:|:------------:|:----------:|:------:|
 | AES-256-GCM encryption | ✅ | ✅ | ❌ | ✅ |
@@ -41,6 +47,8 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | Open source | ✅ | ❌ | ❌ | ❌ |
 | Windows native | ✅ | ✅ | ✅ | ✅ |
 | Rate-limited REST API | ✅ | N/A | ❌ | ❌ |
+
+</details>
 
 > GhostBackup is purpose-built for small businesses that need real encryption, real audit trails, and zero recurring cost — without the complexity of enterprise backup suites.
 
@@ -128,7 +136,7 @@ Before adopting GhostBackup, understand what it **does not** do:
 |------------|--------|
 | **Windows only** | Requires Windows 10/11. No Linux or macOS support. |
 | **Local drives only** | Backs up to directly attached drives (internal/external SSDs). No cloud, NAS, or network share support. |
-| **No offsite copy** | GhostBackup handles local redundancy only. Offsite backup is your responsibility. |
+| **No offsite copy** | GhostBackup handles local redundancy only. Offsite backup is your responsibility — see [OFFSITE.md](OFFSITE.md) for simple options using your existing tools. |
 | **No deduplication** | Changed files are copied in full on each backup run. No block-level or byte-level dedup. |
 | **Single machine** | No multi-user or networked deployment. If the machine is offline, no backup runs. |
 | **Files only** | Restores individual files/folders — not OS images. Pair with Macrium Reflect Free for full system recovery. |
@@ -143,9 +151,9 @@ Before adopting GhostBackup, understand what it **does not** do:
 
 ## 🚀 Quick Start
 
-**Option A — Download the installer (recommended):**
+**Option A — Download the installer (Recommended for end users):**
 
-Download `GhostBackup-Setup.exe` from the [latest GitHub Release](https://github.com/Egyan07/GhostBackup/releases/latest) and run it. The installer bundles everything — no prerequisites needed.
+Download **`GhostBackup-Setup.exe`** from the [latest GitHub Release](https://github.com/Egyan07/GhostBackup/releases/latest) and run it. The installer bundles all dependencies (Python, Node.js) and sets up the app automatically.
 
 **Option B — Build from source (~5 minutes):**
 
@@ -210,7 +218,7 @@ npm run test:coverage
 
 | Suite | Tests | Coverage | Type | CI |
 |-------|-------|----------|------|----|
-| Backend | 338 | 90% line | Unit + integration | ✅ GitHub Actions |
+| Backend | 368 | 90% line | Unit + integration | ✅ GitHub Actions |
 | Frontend | 142 | 63% stmt | Unit (Vitest + v8) | ✅ GitHub Actions |
 
 **What's tested:**
@@ -418,7 +426,7 @@ GhostBackup/
 │   ├── syncer.py            ← backup engine (scan, encrypt, copy, verify, prune)
 │   ├── utils.py             ← shared helpers (fmt_bytes, fmt_duration)
 │   ├── watcher.py           ← watchdog real-time file watcher
-│   └── tests/               ← 338 pytest tests (480 total with frontend)
+│   └── tests/               ← 368 pytest tests (510 total with frontend)
 │
 ├── electron/
 │   ├── main.js              ← Electron main process (spawns backend, tray)
@@ -435,6 +443,7 @@ GhostBackup/
 │   └── tests/               ← 142 vitest tests
 │
 ├── screenshots/             ← README screenshots
+├── OFFSITE.md               ← offsite backup guide
 ├── SETUP.md                 ← full setup guide
 └── CHANGELOG.md             ← full version history
 ```
@@ -493,7 +502,7 @@ Open a GitHub issue or contact the author directly. Do not include exploit detai
 - **GDPR:** If backing up personal data, conduct your own data protection impact assessment. Consider how right-to-erasure requests interact with long-term retention.
 - **Key management:** Back up your encryption key securely. If lost, all encrypted backups are permanently unrecoverable.
 - **Restore testing:** Periodically verify you can actually restore from backups. GhostBackup provides the tools — you must verify they work for your data.
-- **Offsite copy:** GhostBackup handles local redundancy only. You are responsible for maintaining an offsite copy.
+- **Offsite copy:** GhostBackup handles local redundancy only. You are responsible for maintaining an offsite copy — see [OFFSITE.md](OFFSITE.md) for recommended approaches.
 
 ---
 
