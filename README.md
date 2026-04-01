@@ -99,11 +99,11 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 ### 🛡️ Security & Privacy
 | Feature | Description |
 |---------|-------------|
-| 🔐 Encryption at Rest | AES-256-GCM streaming encryption via Python `cryptography` library. Constant memory usage. Per-file random nonce. |
+| 🔐 Encryption at Rest | AES-256-GCM streaming encryption via Python `cryptography` library. Constant memory usage regardless of file size. Per-file random nonce. Versioned encryption header for future key rotation. Per-installation HKDF salt for stronger key isolation. |
 | 🔐 Key Protection | Encryption keys stored in Windows Credential Manager (keyring). Automatic migration from `.env.local`. |
-| 🔒 API Security | Session token per launch via `crypto.randomBytes(32)`. HMAC-verified timing-safe comparisons. |
-| 🛡️ Ransomware Proof | Write-once-read-many (WORM) logic for the immutable window (7 days). |
-| 💾 Dual-SSD Redundancy | Primary and secondary SSD support for local 3-2-1 compliance. See [OFFSITE.md](OFFSITE.md). |
+| 🔒 API Security | Auto-generated session token per launch via `crypto.randomBytes(32)`. All endpoints authenticated via `X-API-Key` header with timing-safe comparison (`hmac.compare_digest`). Rate limiting on sensitive endpoints (slowapi). |
+| 🛡️ Immutable Window | Write-once-read-many (WORM) logic for the recent backup window (7 days). |
+| 💾 Dual-SSD Redundancy | Primary and secondary SSD support. Combined with the original source, this provides 3 copies across 2 drives. Manual offsite copy support via [OFFSITE.md](OFFSITE.md). |
 
 ### 📊 Monitoring & Auditability
 | Feature | Description |
@@ -113,7 +113,7 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | 🧪 Restore Drill Tracking | Every restore is logged as a drill. Escalating reminders if no drill in 30/37/44 days. Audit-ready history. |
 | 📧 Email Alerts | SMTP-based failure alerts and run summaries. Supports Gmail App Passwords and standard SMTP providers. |
 | 🔔 Desktop Notifications | Windows toast notification on backup completion for all outcomes — success, partial, and failed. |
-| 📝 Audit Logs | Detailed run history and alert logs persisted in an immutable SQLite database. |
+| 📝 Audit Logs | Detailed run history and alert logs persisted in a local SQLite database. |
 
 ### ⚡ Performance & UX
 | Feature | Description |
@@ -121,7 +121,7 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 | ⏰ Scheduled Backups | Daily automated backups via APScheduler with configurable timezone support. |
 | 👁️ Real-Time Watching | Watchdog-based file system monitor for instant incremental sync. |
 | 🧪 Dry-Run Restore | Preview exactly which files will be restored before writing to disk. |
-| 🧹 Automated Pruning | Smart retention policy (daily/weekly/yearly) to manage SSD space automatically. |
+| 🧹 Automated Pruning | Smart retention policy (daily/weekly/yearly) that automatically deletes old backups to free up SSD space while respecting the immutable window. |
 | 🌗 Dark/Light Theme | Toggle between dark (default) and light themes. Choice persists via localStorage. |
 
 ### 🛠️ Developer & Admin Tools
@@ -163,25 +163,9 @@ Before adopting GhostBackup, understand what it **does not** do:
 2. Run the installer and follow the on-screen prompts.
 3. Launch GhostBackup from your desktop or start menu.
 
-### Option B — Automated Setup (From Source)
+### Option B — Manual Setup (~5 minutes)
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Egyan07/GhostBackup.git
-   cd GhostBackup
-   ```
-
-2. Run the guided installer:
-   ```
-   install.bat
-   ```
-
-3. Launch GhostBackup:
-   ```
-   start.bat
-   ```
-
-### Option C — Manual Setup (~5 minutes):
+If you prefer to install manually or use your existing Python/Node environments:
 
 ### Prerequisites
 
@@ -362,9 +346,6 @@ All endpoints require the **X-API-Key header** except `/health`.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | /health/deep | Comprehensive health check for monitoring tools |
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
 | GET | /ssd/status | Disk usage and health for configured drives |
 | GET | /alerts | In-app alert list |
 | POST | /alerts/:id/dismiss | Dismiss a single alert |
