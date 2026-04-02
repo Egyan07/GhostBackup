@@ -141,3 +141,55 @@ class TestNoOpMode:
         # (self._fernet is None)
         with pytest.raises(AttributeError):
             no_crypto.encrypt_chunks(src, dst, chunk_bytes=1024)
+
+
+class TestCryptoErrorHandling:
+    """Verify that crypto methods raise RuntimeError (not AssertionError)
+    when called without proper initialization."""
+
+    def test_decrypt_to_legacy_without_fernet_raises_runtime_error(self, tmp_path):
+        """decrypt_to on a non-stream file must raise RuntimeError, not AssertionError."""
+        helper = _CryptoHelper(None)
+        src = tmp_path / "legacy.enc"
+        src.write_bytes(b"not-a-stream-file")  # no GBENC1 header -> legacy path
+        dst = tmp_path / "out.txt"
+        with pytest.raises(RuntimeError, match="Fernet decryption not initialised"):
+            helper.decrypt_to(src, dst)
+
+    def test_decrypt_stream_without_aesgcm_raises_runtime_error(self, tmp_path):
+        """_decrypt_stream must raise RuntimeError, not AssertionError."""
+        helper = _CryptoHelper(None)
+        src = tmp_path / "stream.enc"
+        src.write_bytes(b"GBENC1\x01" + b"\x00\x00\x00\x00")  # valid header, empty stream
+        dst = tmp_path / "out.txt"
+        with pytest.raises(RuntimeError, match="AESGCM decryption not initialised"):
+            helper._decrypt_stream(src, dst)
+
+    def test_decrypt_and_hash_without_crypto_raises_runtime_error(self, tmp_path):
+        """decrypt_and_hash must raise RuntimeError, not AssertionError."""
+        helper = _CryptoHelper(None)
+        src = tmp_path / "file.enc"
+        src.write_bytes(b"GBENC1\x01" + b"\x00\x00\x00\x00")
+        with pytest.raises(RuntimeError, match="not initialised"):
+            helper.decrypt_and_hash(src)
+
+    def test_decrypt_bytes_without_fernet_raises_runtime_error(self):
+        """decrypt_bytes must raise RuntimeError, not AssertionError."""
+        helper = _CryptoHelper(None)
+        with pytest.raises(RuntimeError, match="Fernet decryption not initialised"):
+            helper.decrypt_bytes(b"some-data")
+
+
+class TestEncryptionFallback:
+    """Verify that _CryptoHelper never silently falls back to unencrypted."""
+
+    def test_bad_key_with_encryption_config_enabled_raises(self):
+        """When require_encryption=True and the key is garbage, must raise."""
+        with pytest.raises(RuntimeError, match="required but failed"):
+            _CryptoHelper(b"not-a-valid-key", require_encryption=True)
+
+    def test_bad_key_without_require_still_disables(self):
+        """When require_encryption=False (legacy), bad key disables silently.
+        This preserves backward compatibility for development mode."""
+        helper = _CryptoHelper(b"not-a-valid-key", require_encryption=False)
+        assert helper.enabled is False

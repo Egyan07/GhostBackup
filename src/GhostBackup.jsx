@@ -7,6 +7,7 @@ import BackupConfig from "./pages/BackupConfig.jsx";
 import RestoreUI    from "./pages/RestoreUI.jsx";
 import Settings     from "./pages/Settings.jsx";
 import api          from "./api-client.js";
+import { PageErrorBoundary } from "./components/ErrorBoundary.jsx";
 
 const NAV = [
   { id: "dashboard", label: "Dashboard",     icon: "⊞", sec: "Monitor"   },
@@ -37,7 +38,11 @@ const PAGES = {
 
 function PageView({ screen }) {
   const Page = PAGES[screen] ?? Dashboard;
-  return <Page />;
+  return (
+    <PageErrorBoundary key={screen} pageName={PAGE_TITLES[screen] || screen}>
+      <Page />
+    </PageErrorBoundary>
+  );
 }
 
 function formatNextRun(health) {

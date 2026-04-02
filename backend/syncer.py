@@ -77,8 +77,11 @@ class _CryptoHelper:
                     raise RuntimeError(
                         f"Encryption is required but failed to initialise: {e}"
                     ) from e
-                logger.error(
-                    f"Failed to initialise encryption: {e} — backups will be UNENCRYPTED"
+                logger.warning(
+                    "SECURITY WARNING: Encryption key provided but initialisation "
+                    "failed (%s). Backups will proceed UNENCRYPTED because "
+                    "require_encryption=False in config. Set encryption.enabled=true "
+                    "to enforce encryption.", e,
                 )
                 self._fernet = None
                 self._aesgcm = None
@@ -145,11 +148,13 @@ class _CryptoHelper:
             self._decrypt_stream(src_path, dst_path)
         else:
             # Legacy Fernet format — must load entire file
-            assert self._fernet is not None, "Fernet decryption not initialised"
+            if self._fernet is None:
+                raise RuntimeError("Fernet decryption not initialised")
             dst_path.write_bytes(self._fernet.decrypt(src_path.read_bytes()))
 
     def _decrypt_stream(self, src_path: Path, dst_path: Path) -> None:
-        assert self._aesgcm is not None, "AESGCM decryption not initialised"
+        if self._aesgcm is None:
+            raise RuntimeError("AESGCM decryption not initialised")
         with open(src_path, "rb") as fin, open(dst_path, "wb") as fout:
             magic = fin.read(len(_STREAM_MAGIC))
             if magic != _STREAM_MAGIC:
@@ -176,8 +181,10 @@ class _CryptoHelper:
 
     def decrypt_and_hash(self, path: Path) -> str:
         """Decrypt and return the xxHash of the plaintext (constant memory)."""
-        assert self._aesgcm is not None, "AESGCM decryption not initialised"
-        assert self._fernet is not None, "Fernet decryption not initialised"
+        if self._aesgcm is None:
+            raise RuntimeError("AESGCM decryption not initialised")
+        if self._fernet is None:
+            raise RuntimeError("Fernet decryption not initialised")
         h = xxhash.xxh64()
         if self._is_stream_format(path):
             with open(path, "rb") as fin:
@@ -200,7 +207,8 @@ class _CryptoHelper:
 
     def decrypt_bytes(self, data: bytes) -> bytes:
         """Decrypt in-memory Fernet token (legacy compatibility)."""
-        assert self._fernet is not None, "Fernet decryption not initialised"
+        if self._fernet is None:
+            raise RuntimeError("Fernet decryption not initialised")
         return self._fernet.decrypt(data)
 
 

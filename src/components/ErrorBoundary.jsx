@@ -40,3 +40,45 @@ export default class ErrorBoundary extends Component {
     return this.props.children;
   }
 }
+
+export class PageErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error(`[PageErrorBoundary:${this.props.pageName}]`, error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          justifyContent: "center", minHeight: 300,
+          color: "var(--text-primary)", gap: 12, padding: 32,
+        }}>
+          <div style={{ fontSize: 28 }}>&#x26A0;</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>
+            {this.props.pageName || "Page"} failed to load
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", textAlign: "center", maxWidth: 360 }}>
+            {this.state.error.message}
+          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => this.setState({ error: null })}
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}

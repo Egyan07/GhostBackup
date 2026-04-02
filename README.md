@@ -63,6 +63,7 @@ GhostBackup is a secure automated backup system built with **Electron, React, an
 - [Security](#-security)
 - [Retention & Auditability](#-retention--auditability)
 - [Troubleshooting](#-troubleshooting)
+- [Disaster Recovery](#-disaster-recovery)
 - [Contributing](#-contributing)
 - [Use Cases](#-use-cases)
 - [License](#-license)
@@ -452,6 +453,7 @@ GhostBackup/
 ├── screenshots/             ← README screenshots
 ├── OFFSITE.md               ← offsite backup guide
 ├── SETUP.md                 ← full setup guide
+├── RECOVERY.md              ← disaster recovery guide
 └── CHANGELOG.md             ← full version history
 ```
 
@@ -582,6 +584,22 @@ Your `config.yaml` and `.env.local` will not be overwritten.
 **Q: Where are the log files for undiagnosed issues?**
 
 **A:** Logs are written to `backend/logs/` and also visible in the app under Logs & History. For backend errors not shown in the UI, check `backend/logs/ghostbackup.log`. You can filter by INFO, WARN, and ERROR levels in the Logs page.
+
+---
+
+## 🆘 Disaster Recovery
+
+When things go wrong, refer to **[RECOVERY.md](RECOVERY.md)** for step-by-step recovery procedures covering:
+
+- Lost encryption key
+- Corrupted manifest database
+- Deleted or corrupted `.env.local`
+- SSD failure mid-backup
+- Application won't start
+- Verification finds corrupted files
+- Prevention checklist
+
+Keep a printed copy alongside your offsite backup drive.
 
 ---
 

@@ -58,6 +58,13 @@ _syncer:     Optional[LocalSyncer]     = None
 _watcher:    Optional[FileWatcher]     = None
 _active_run: Optional[dict]  = None
 _run_mutex:  threading.Lock = threading.Lock()  # protects _active_run mutations from thread pool
+_restore_active = False
+
+
+def _get_active_run_snapshot() -> Optional[dict]:
+    """Thread-safe snapshot of the current active run."""
+    with _run_mutex:
+        return dict(_active_run) if _active_run else None
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
 _limiter = Limiter(key_func=get_remote_address)
@@ -364,7 +371,8 @@ async def run_backup_job(
     reporter = reporter or _reporter
     syncer   = syncer   or _syncer
     scheduler = scheduler or _scheduler
-    assert cfg is not None and manifest is not None and reporter is not None and syncer is not None
+    if not all([cfg, manifest, reporter, syncer]):
+        raise RuntimeError("Backup job dependencies not initialised")
 
     with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
@@ -382,7 +390,8 @@ async def run_backup_job(
             return
 
         run_id      = manifest.create_run(full_backup=full)
-        assert run_id is not None
+        if run_id is None:
+            raise RuntimeError("Failed to create backup run in manifest DB")
         _active_run = _new_run_state(run_id, full)
 
     if scheduler:
@@ -602,8 +611,10 @@ async def _retry_locked_files(
     cfg      = cfg      or _config
     syncer   = syncer   or _syncer
     manifest = manifest or _manifest
-    assert cfg is not None and syncer is not None and manifest is not None
-    assert _active_run is not None
+    if not all([cfg, syncer, manifest]):
+        raise RuntimeError("Retry dependencies not initialised")
+    if _active_run is None:
+        raise RuntimeError("No active run — cannot retry locked files")
 
     locked = [
         e for e in _active_run.get("errors", [])
@@ -843,7 +854,7 @@ async def dashboard(cfg: ConfigManager = Depends(provide_config),
             "timezone": cfg.timezone,
             "label": f"Daily at {cfg.schedule_time} {cfg.timezone}",
         },
-        "active_run":  dict(_active_run) if _active_run else None,
+        "active_run":  _get_active_run_snapshot(),
     }
 
 
@@ -1027,9 +1038,17 @@ async def restore(request: Request, req: RestoreRequest, background_tasks: Backg
         raise_gb("GB-E041", 404)
 
     # Validate destination path to prevent path traversal
-    dest_resolved = Path(req.destination).resolve()
-    if ".." in dest_resolved.parts:
+    raw_dest = req.destination
+    if "\x00" in raw_dest:
         raise_gb("GB-E042")
+    if ".." in Path(raw_dest).parts:
+        raise_gb("GB-E042")
+    dest_resolved = Path(raw_dest).resolve()
+    # Block non-absolute or suspicious paths on Windows
+    if os.name == "nt":
+        drive = dest_resolved.drive
+        if not drive or not drive[0].isalpha():
+            raise_gb("GB-E042")
 
     if req.dry_run:
         return {
@@ -1042,6 +1061,11 @@ async def restore(request: Request, req: RestoreRequest, background_tasks: Backg
                 for f in files
             ],
         }
+
+    global _restore_active
+    if _restore_active:
+        raise HTTPException(409, "A restore operation is already in progress")
+    _restore_active = True
 
     loop = asyncio.get_running_loop()
     try:
@@ -1065,6 +1089,8 @@ async def restore(request: Request, req: RestoreRequest, background_tasks: Backg
         }
     except Exception as e:
         raise HTTPException(500, f"Restore failed: {e}")
+    finally:
+        _restore_active = False
 
 
 @app.post("/verify")

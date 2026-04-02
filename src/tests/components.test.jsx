@@ -261,3 +261,76 @@ describe("Countdown", () => {
     clearSpy.mockRestore();
   });
 });
+
+// ── CSV export sanitization ──────────────────────────────────────────────────
+
+describe("CSV export sanitization", () => {
+  const escapeCsv = (v) => {
+    let s = String(v ?? "").replace(/"/g, '""');
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return `"${s}"`;
+  };
+
+  it("escapes double quotes", () => {
+    expect(escapeCsv('say "hello"')).toBe('"say ""hello"""');
+  });
+
+  it("prefixes formula characters with single quote", () => {
+    expect(escapeCsv("=SUM(A1)")).toBe(`"'=SUM(A1)"`);
+    expect(escapeCsv("+cmd")).toBe(`"'+cmd"`);
+    expect(escapeCsv("-cmd")).toBe(`"'-cmd"`);
+    expect(escapeCsv("@SUM")).toBe(`"'@SUM"`);
+  });
+
+  it("leaves normal text unchanged", () => {
+    expect(escapeCsv("INFO")).toBe('"INFO"');
+    expect(escapeCsv("Backup completed")).toBe('"Backup completed"');
+  });
+
+  it("handles null and undefined", () => {
+    expect(escapeCsv(null)).toBe('""');
+    expect(escapeCsv(undefined)).toBe('""');
+  });
+});
+
+// ── PageErrorBoundary ────────────────────────────────────────────────────────
+
+import { PageErrorBoundary } from "../components/ErrorBoundary.jsx";
+
+function BrokenPage() {
+  throw new Error("Page crashed!");
+}
+
+function WorkingPage() {
+  return <div>Working</div>;
+}
+
+describe("PageErrorBoundary", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it("renders children when no error", () => {
+    render(<PageErrorBoundary pageName="Dashboard"><WorkingPage /></PageErrorBoundary>);
+    expect(screen.getByText("Working")).toBeTruthy();
+  });
+
+  it("shows page-level error with retry button on crash", () => {
+    render(<PageErrorBoundary pageName="Dashboard"><BrokenPage /></PageErrorBoundary>);
+    expect(screen.getByText(/Dashboard failed to load/)).toBeTruthy();
+    expect(screen.getByText("Reload Page")).toBeTruthy();
+  });
+
+  it("recovers when retry is clicked", () => {
+    let shouldThrow = true;
+    function MaybeBroken() {
+      if (shouldThrow) throw new Error("boom");
+      return <div>Recovered</div>;
+    }
+    render(<PageErrorBoundary pageName="Test"><MaybeBroken /></PageErrorBoundary>);
+    expect(screen.getByText(/Test failed to load/)).toBeTruthy();
+    shouldThrow = false;
+    fireEvent.click(screen.getByText("Reload Page"));
+    expect(screen.getByText("Recovered")).toBeTruthy();
+  });
+});

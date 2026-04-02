@@ -707,3 +707,56 @@ class TestHealthDeep:
         assert "checked" in sc
         assert "passed" in sc
         assert "failed" in sc
+
+
+# ── /restore path traversal ───────────────────────────────────────────────────
+
+class TestRestorePathTraversal:
+    """Verify the /restore endpoint blocks path traversal attempts."""
+
+    def test_dotdot_in_destination_blocked(self, client):
+        import api as api_module
+        api_module._manifest.get_run.return_value = {"id": 1, "status": "completed"}
+        api_module._manifest.get_files.return_value = [{"name": "f.txt", "backup_path": "/tmp/f.txt"}]
+        resp = client.post("/restore", json={
+            "run_id": 1,
+            "library": "Clients",
+            "destination": "/tmp/restore/../../etc",
+        })
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "GB-E042"
+
+    def test_null_byte_in_destination_blocked(self, client):
+        import api as api_module
+        api_module._manifest.get_run.return_value = {"id": 1, "status": "completed"}
+        api_module._manifest.get_files.return_value = [{"name": "f.txt", "backup_path": "/tmp/f.txt"}]
+        resp = client.post("/restore", json={
+            "run_id": 1,
+            "library": "Clients",
+            "destination": "/tmp/restore\x00/evil",
+        })
+        assert resp.status_code == 400
+
+
+# ── /restore concurrency ──────────────────────────────────────────────────────
+
+class TestRestoreConcurrency:
+    def test_concurrent_restore_rejected(self, client):
+        """Second restore while first is running should be rejected."""
+        import api as api_module
+        api_module._manifest.get_run.return_value = {"id": 1, "status": "completed"}
+        api_module._manifest.get_files.return_value = [{"name": "f.txt", "backup_path": "/tmp/f.txt"}]
+        api_module._syncer.restore_files.return_value = {"restored": 1, "failed": 0, "errors": []}
+
+        # Simulate active restore
+        api_module._restore_active = True
+        try:
+            resp = client.post("/restore", json={
+                "run_id": 1,
+                "destination": "/tmp/restore_test",
+                "library": "",
+                "dry_run": False,
+            })
+            assert resp.status_code == 409
+        finally:
+            api_module._restore_active = False
