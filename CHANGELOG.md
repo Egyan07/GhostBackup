@@ -4,30 +4,45 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
-## v3.2.0 — Security Hardening & CI Fixes
+## v3.2.0 — Security Hardening, TypeScript & CI Overhaul
+
+### TypeScript Migration
+- **Full frontend TypeScript conversion**: all 17 source files migrated from JS/JSX to TS/TSX with strict mode enabled.
+- **Shared type definitions** (`types.ts`): 20+ interfaces covering API responses, config, alerts, run status, and restore results.
+- **Window bridge typing** (`global.d.ts`): `window.ghostbackup` Electron IPC bridge fully typed.
+- **`tsconfig.json`**: strict, `react-jsx`, bundler module resolution, no emit.
+- **ESLint upgraded**: `typescript-eslint` parser added for TS/TSX files.
+- **`tsc --noEmit` in CI**: TypeScript type checking added to the lint job.
+
+### Electron Tests
+- **73 new Electron main-process tests** (`electron/tests/main.test.mjs`): covers env file parsing, backend health polling, API token generation, credential validation, notification server auth, preload bridge API surface, IPC handler registration, CSP configuration, and credential persistence.
+- **Separate vitest config** for Electron tests (`vitest.electron.config.js`).
 
 ### Security
 - **Assert guards replaced** (`api.py`, `syncer.py`): 9 `assert` statements replaced with `if/raise RuntimeError` — assertions are stripped by Python's `-O` flag, so security checks must not depend on them.
 - **Path traversal hardened** (`api.py`): restore endpoint now checks raw path for `..` segments and null bytes *before* `.resolve()`, which silently normalizes `..` away. Windows drive-letter validation added.
 - **Encryption fail-hard mode** (`syncer.py`): `require_encryption` config flag now logs `SECURITY WARNING` and raises on missing key, preventing silent fallback to unencrypted backups.
-- **CSV formula injection blocked** (`LogsViewer.jsx`): exported CSV cells starting with `=`, `+`, `-`, `@`, `\t`, `\r` are prefixed with a single quote to prevent Excel formula execution.
+- **CSV formula injection blocked** (`LogsViewer.tsx`): exported CSV cells starting with `=`, `+`, `-`, `@`, `\t`, `\r` are prefixed with a single quote to prevent Excel formula execution.
 - **Restore concurrency guard** (`api.py`): `_restore_active` flag with `try/finally` prevents overlapping restore operations that could corrupt the destination.
 - **Thread-safe dashboard reads** (`api.py`): `_get_active_run_snapshot()` returns a mutex-guarded copy of `_active_run`, preventing partial reads from concurrent threads.
+- **0 npm vulnerabilities**: upgraded vite 5→7, vitest 1→4, plugin-react 4→5 — eliminates all 6 moderate esbuild/vite CVEs.
 
 ### Frontend
-- **Page-level error boundary** (`ErrorBoundary.jsx`, `GhostBackup.jsx`): `PageErrorBoundary` component with `key={screen}` auto-resets on navigation. Catches per-page render crashes without tearing down the whole app.
+- **Page-level error boundary** (`ErrorBoundary.tsx`, `GhostBackup.tsx`): `PageErrorBoundary` component with `key={screen}` auto-resets on navigation. Catches per-page render crashes without tearing down the whole app.
 
 ### Documentation
 - **Disaster recovery guide** (`RECOVERY.md`): 6 recovery scenarios (lost key, corrupted DB, deleted `.env.local`, SSD failure, app won't start, corrupted files) with step-by-step instructions and prevention checklist.
 
-### CI Fixes
+### CI
 - **mypy type narrowing** (`api.py`): added `typing.cast()` calls after `if not all([...]): raise` guards — mypy cannot narrow types through `all()`, causing 26 `union-attr` errors.
 - **Electron 33 -> 41** (`package.json`): bumped to fix 15 high-severity CVEs (ASAR bypass, IPC vulnerabilities, use-after-free).
 - **lodash override** (`package.json`): forced `4.18.1` to fix code injection and prototype pollution CVEs in transitive dependency.
+- **OpenAPI schema validation**: new CI job validates FastAPI auto-generated schema (31 endpoints) and uploads `openapi.json` as artifact.
+- **TypeScript CI gate**: `tsc --noEmit` runs in the lint job alongside eslint and mypy.
 
 ### Testing
-- 16 new tests: assert-guard verification (4), path traversal (2), encryption fallback (2), error boundary (3), CSV sanitization (4), restore concurrency (1)
-- **526 tests passing** — 377 backend + 149 frontend
+- 89 new tests: Electron main process (73), assert-guard verification (4), path traversal (2), encryption fallback (2), error boundary (3), CSV sanitization (4), restore concurrency (1)
+- **599 tests passing** — 377 backend + 149 frontend + 73 electron
 
 ---
 

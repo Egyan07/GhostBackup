@@ -8,7 +8,7 @@ const apiMocks = vi.hoisted(() => ({
   removeSite: vi.fn(),
 }));
 
-vi.mock("../api-client.js", () => ({
+vi.mock("../api-client", () => ({
   default: {
     getConfig: apiMocks.getConfig,
     updateSite: apiMocks.updateSite,
@@ -20,7 +20,7 @@ vi.mock("../api-client.js", () => ({
   },
 }));
 
-import BackupConfig from "../pages/BackupConfig.jsx";
+import BackupConfig from "../pages/BackupConfig";
 
 describe("BackupConfig", () => {
   beforeEach(() => {

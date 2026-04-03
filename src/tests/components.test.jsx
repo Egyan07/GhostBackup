@@ -8,10 +8,10 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
-import ErrBanner    from "../components/ErrBanner.jsx";
-import StatusPill   from "../components/StatusPill.jsx";
-import Countdown    from "../components/Countdown.jsx";
-import LoadingState from "../components/LoadingState.jsx";
+import ErrBanner    from "../components/ErrBanner";
+import StatusPill   from "../components/StatusPill";
+import Countdown    from "../components/Countdown";
+import LoadingState from "../components/LoadingState";
 
 // ── ErrBanner ─────────────────────────────────────────────────────────────────
 
@@ -295,7 +295,7 @@ describe("CSV export sanitization", () => {
 
 // ── PageErrorBoundary ────────────────────────────────────────────────────────
 
-import { PageErrorBoundary } from "../components/ErrorBoundary.jsx";
+import { PageErrorBoundary } from "../components/ErrorBoundary";
 
 function BrokenPage() {
   throw new Error("Page crashed!");

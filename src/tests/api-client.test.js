@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import apiDefault, { ApiError, clearTokenCache, request, api } from "../api-client.js";
+import apiDefault, { ApiError, clearTokenCache, request, api } from "../api-client";
 
 beforeEach(() => {
   clearTokenCache();

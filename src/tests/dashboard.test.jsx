@@ -9,7 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   dashboard: vi.fn(),
 }));
 
-vi.mock("../api-client.js", () => ({
+vi.mock("../api-client", () => ({
   default: {
     dashboard:             apiMocks.dashboard,
     ssdStatus:             vi.fn().mockResolvedValue({ status: "ok" }),
@@ -21,14 +21,14 @@ vi.mock("../api-client.js", () => ({
 // ---------------------------------------------------------------------------
 // Stub heavy child components so we only test Dashboard logic
 // ---------------------------------------------------------------------------
-vi.mock("../components/StatusPill.jsx",  () => ({ default: ({ status }) => <span data-testid="status-pill">{status}</span> }));
-vi.mock("../components/SsdGauge.jsx",    () => ({ default: ({ used, total }) => <div data-testid="ssd-gauge">{used}/{total}</div> }));
-vi.mock("../components/Heatmap.jsx",     () => ({ default: () => <div data-testid="heatmap" /> }));
-vi.mock("../components/Countdown.jsx",   () => ({ default: ({ nextRun, scheduleLabel }) => <div data-testid="countdown">{scheduleLabel || nextRun}</div> }));
-vi.mock("../components/ErrBanner.jsx",   () => ({ default: ({ error, onDismiss }) => error ? <div data-testid="err-banner" onClick={onDismiss}>{typeof error === "string" ? error : error?.message ?? String(error)}</div> : null }));
-vi.mock("../components/LoadingState.jsx",() => ({ default: () => <div data-testid="loading-state" /> }));
+vi.mock("../components/StatusPill",  () => ({ default: ({ status }) => <span data-testid="status-pill">{status}</span> }));
+vi.mock("../components/SsdGauge",    () => ({ default: ({ used, total }) => <div data-testid="ssd-gauge">{used}/{total}</div> }));
+vi.mock("../components/Heatmap",     () => ({ default: () => <div data-testid="heatmap" /> }));
+vi.mock("../components/Countdown",   () => ({ default: ({ nextRun, scheduleLabel }) => <div data-testid="countdown">{scheduleLabel || nextRun}</div> }));
+vi.mock("../components/ErrBanner",   () => ({ default: ({ error, onDismiss }) => error ? <div data-testid="err-banner" onClick={onDismiss}>{typeof error === "string" ? error : error?.message ?? String(error)}</div> : null }));
+vi.mock("../components/LoadingState",() => ({ default: () => <div data-testid="loading-state" /> }));
 
-import Dashboard from "../pages/Dashboard.jsx";
+import Dashboard from "../pages/Dashboard";
 
 // ---------------------------------------------------------------------------
 // Shared fixture

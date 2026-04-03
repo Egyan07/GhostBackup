@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   generateEncryptionKey: vi.fn(),
 }));
 
-vi.mock("../api-client.js", () => ({
+vi.mock("../api-client", () => ({
   default: {
     getConfig:             apiMocks.getConfig,
     updateSmtp:            apiMocks.updateSmtp,
@@ -32,7 +32,7 @@ vi.mock("../api-client.js", () => ({
   },
 }));
 
-import Settings from "../pages/Settings.jsx";
+import Settings from "../pages/Settings";
 
 const BASE_CFG = {
   encryption_active: true,
@@ -84,7 +84,7 @@ describe("Settings — SMTP panel", () => {
 
   it("calls testSmtp when test button is clicked", async () => {
     const testSmtpMock = vi.fn().mockResolvedValue({});
-    const { default: api } = await import("../api-client.js");
+    const { default: api } = await import("../api-client");
     api.testSmtp = testSmtpMock;
     render(<Settings />);
     const btn = await screen.findByText("Send Test Email");

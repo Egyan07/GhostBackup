@@ -164,8 +164,55 @@ jobs:
       - name: Install Node dependencies
         run: npm install --legacy-peer-deps
 
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
       - name: JavaScript lint
         run: npm run lint
+
+  # ── OpenAPI Schema Validation ─────────────────────────────────────────────
+  openapi:
+    name: OpenAPI Schema Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Start backend and export OpenAPI schema
+        run: |
+          cd backend
+          python -c "
+          from api import app
+          import json
+          schema = app.openapi()
+          # Validate basic structure
+          assert schema.get('openapi', '').startswith('3.'), 'Not a valid OpenAPI 3.x schema'
+          assert 'paths' in schema, 'Schema has no paths'
+          assert len(schema['paths']) > 0, 'Schema has no endpoints'
+          assert 'info' in schema, 'Schema has no info block'
+          assert schema['info']['title'] == 'GhostBackup API', f'Unexpected title: {schema[\"info\"][\"title\"]}'
+          # Write schema to file for artifact
+          with open('../openapi.json', 'w') as f:
+              json.dump(schema, f, indent=2)
+          print(f'OpenAPI schema valid: {len(schema[\"paths\"])} endpoints')
+          "
+        env:
+          GHOSTBACKUP_CONFIG: backend/config/config.yaml.example
+          GHOSTBACKUP_API_PORT: "8765"
+
+      - name: Upload OpenAPI schema
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-schema
+          path: openapi.json
+          retention-days: 30
 
   # ── Security ─────────────────────────────────────────────────────────────
   security:
