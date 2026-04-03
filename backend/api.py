@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import uvicorn
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
@@ -235,7 +235,7 @@ async def lifespan(app: FastAPI):
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="GhostBackup API", version="3.1.0", lifespan=lifespan)
+app = FastAPI(title="GhostBackup API", version="3.2.0", lifespan=lifespan)
 
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, lambda req, exc: Response(
@@ -373,6 +373,11 @@ async def run_backup_job(
     scheduler = scheduler or _scheduler
     if not all([cfg, manifest, reporter, syncer]):
         raise RuntimeError("Backup job dependencies not initialised")
+    # Narrow types for mypy — guaranteed non-None after the guard above
+    cfg = cast(ConfigManager, cfg)
+    manifest = cast(ManifestDB, manifest)
+    reporter = cast(Reporter, reporter)
+    syncer = cast(LocalSyncer, syncer)
 
     with _run_mutex:
         if _active_run and _active_run.get("status") == "running":
@@ -613,6 +618,10 @@ async def _retry_locked_files(
     manifest = manifest or _manifest
     if not all([cfg, syncer, manifest]):
         raise RuntimeError("Retry dependencies not initialised")
+    # Narrow types for mypy — guaranteed non-None after the guard above
+    cfg = cast(ConfigManager, cfg)
+    syncer = cast(LocalSyncer, syncer)
+    manifest = cast(ManifestDB, manifest)
     if _active_run is None:
         raise RuntimeError("No active run — cannot retry locked files")
 
