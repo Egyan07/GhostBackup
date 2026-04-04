@@ -1,6 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
@@ -31,13 +34,11 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       reportsDirectory: "./coverage",
-      // Only measure coverage on files that have tests written for them
       include: [
         "api-client.{js,ts}",
         "components/**/*.{js,jsx,ts,tsx}",
         "pages/**/*.{js,jsx,ts,tsx}",
       ],
-      // Exclude files that are Electron/app shell (no unit tests expected)
       exclude: [
         "main.{jsx,tsx}",
         "GhostBackup.{jsx,tsx}",

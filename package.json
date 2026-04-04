@@ -14,10 +14,10 @@
     "preview": "vite preview",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && vitest run --config vitest.electron.config.js",
-    "test:frontend": "vitest run",
-    "test:electron": "vitest run --config vitest.electron.config.js",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --config vite.config.mjs && vitest run --config vitest.electron.config.mjs",
+    "test:frontend": "vitest run --config vite.config.mjs",
+    "test:electron": "vitest run --config vitest.electron.config.mjs",
+    "test:coverage": "vitest run --config vite.config.mjs --coverage",
     "test:watch": "vitest"
   },
   "dependencies": {

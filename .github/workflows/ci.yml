@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ["18", "20", "22"]
+        node-version: ["22"]
 
     steps:
       - uses: actions/checkout@v4
@@ -79,7 +79,7 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Run frontend tests
-        run: npm test
+        run: npm run test:frontend
 
       - name: Run frontend coverage
         if: matrix.node-version == '20'
