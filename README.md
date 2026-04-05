@@ -88,15 +88,6 @@ Source Folders ──> Scan & Encrypt ──> Copy to SSD(s) ──> Verify & Lo
 
 ## Features
 
-### Security & Encryption
-- **AES-256-GCM** streaming encryption with per-file random nonce and constant memory usage
-- **Fail-hard mode** — refuses to start if encryption is enabled but key is missing (no silent fallback)
-- **Key fingerprint tracking** — detects key rotation mismatches on restore
-- **Windows Credential Manager** for key storage (falls back to `.env.local` for CI)
-- **Fine-grained CSP** — 10 Electron security directives including `frame-ancestors 'none'`, `object-src 'none'`
-- **Rate-limited API** with timing-safe token authentication (`hmac.compare_digest`)
-- **Path traversal protection** on all file restore operations
-
 ### Backup & Restore
 - **Scheduled daily backups** with configurable timezone (APScheduler)
 - **Real-time file watching** via Watchdog (15s debounce, 120s cooldown)
@@ -165,27 +156,23 @@ Covers: backup engine, all API endpoints, all 6 pages, all 8 components, IPC/pre
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ ELECTRON (main.js)                                          │
-│ Spawns backend, generates API token, system tray, CSP       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ token via environment variable
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ FASTAPI BACKEND (localhost:8765)                             │
-│                                                             │
-│ Auth Middleware ─── APScheduler ─── Watchdog                │
-│                                                             │
-│ syncer.py: scan → encrypt → copy → verify → prune          │
-│ manifest.py: SQLite (runs, files, audit trail)              │
-│ reporter.py: email alerts + desktop notifications           │
-└─────────────────────────────────────────────────────────────┘
-                           ▲
-                           │ HTTP polling (localhost only)
-┌──────────────────────────┴──────────────────────────────────┐
-│ REACT + TYPESCRIPT FRONTEND (sandbox + CSP enforced)        │
-│ Dashboard · Live Run · Logs · Restore · Settings · Alerts   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  ELECTRON (main.js)                                      │
+│  API token generation · backend spawning · system tray   │
+└────────────────────────────┬─────────────────────────────┘
+                             │ env token
+                             ▼
+┌──────────────────────────────────────────────────────────┐
+│  FASTAPI (localhost:8765)                                │
+│  Auth middleware · APScheduler · Watchdog · syncer.py    │
+│  SQLite manifest · email alerts · desktop notifications  │
+└──────────────────────────────────────────────────────────┘
+                             ▲
+                             │ HTTP polling
+┌────────────────────────────┴─────────────────────────────┐
+│  REACT + TYPESCRIPT (Chromium sandbox + CSP)             │
+│  Dashboard · Live Run · Logs · Restore · Settings        │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
