@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320">
+  <rect width="1280" height="320" fill="#0d1117"/>
+
+  <!-- Ghost icon -->
+  <g transform="translate(120, 40)">
+    <!-- Ghost body -->
+    <path d="M100,30 C55,30 20,65 20,110 L20,210 L40,190 L60,210 L80,190 L100,210 L120,190 L140,210 L160,190 L180,210 L180,110 C180,65 145,30 100,30 Z" fill="#e6edf3" opacity="0.95"/>
+    <!-- Left eye -->
+    <circle cx="75" cy="100" r="14" fill="#0d1117"/>
+    <!-- Right eye -->
+    <circle cx="125" cy="100" r="14" fill="#0d1117"/>
+  </g>
+
+  <!-- GhostBackup text -->
+  <text x="370" y="155" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="80" font-weight="700" fill="#e6edf3" letter-spacing="-1">GhostBackup</text>
+
+  <!-- Subtitle -->
+  <text x="374" y="205" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="28" font-weight="400" fill="#8b949e" letter-spacing="4">Silent. Secure. Auditable.</text>
+</svg>

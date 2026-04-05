@@ -1,19 +1,28 @@
-# GhostBackup
+<p align="center">
+  <img src="assets/banner.svg" alt="GhostBackup — Silent. Secure. Auditable." width="100%">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI&logo=githubactions&logoColor=white" alt="CI">
+  <img src="https://img.shields.io/badge/tests-675%2B%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/backend-90%25%20coverage-brightgreen" alt="Backend Coverage">
+  <img src="https://img.shields.io/badge/frontend-75%25%20coverage-green" alt="Frontend Coverage">
+  <img src="https://img.shields.io/github/license/Egyan07/GhostBackup" alt="License">
+  <img src="https://img.shields.io/github/v/release/Egyan07/GhostBackup?label=latest&color=blue" alt="Release">
+  <img src="https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white" alt="Node">
+  <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+</p>
+
+<p align="center">
+  <strong>31 API endpoints</strong> · <strong>675+ tests</strong> · <strong>90% backend coverage</strong> · <strong>7-year retention</strong> · <strong>AES-256-GCM</strong>
+</p>
+
+<p align="center">
+  <strong>Author: <a href="https://github.com/Egyan07">Egyan07</a></strong> · Deployed at Red Parrot Accounting (UK)
+</p>
 
 > **Windows Only** — macOS and Linux are not supported.
-
-### Local. Encrypted. Audited. Yours.
-
-![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
-![Tests](https://img.shields.io/badge/tests-675%2B%20passing-brightgreen)
-![Backend Coverage](https://img.shields.io/badge/backend%20coverage-90%25-brightgreen)
-![Frontend Coverage](https://img.shields.io/badge/frontend%20coverage-75%25-green)
-![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
-![Node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)
-![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-
-**Author: [Egyan07](https://github.com/Egyan07)** | **Deployed at [Red Parrot Accounting](https://github.com/Egyan07/GhostBackup) (UK)**
 
 GhostBackup runs on a dedicated Windows machine, backs up your source folders to one or two local SSDs on a daily schedule, encrypts every file with AES-256-GCM, verifies integrity with xxhash, and emails you if anything fails. **No cloud. No subscriptions. No IT staff required.**
 
