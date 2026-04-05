@@ -337,6 +337,21 @@ npm run lint                                # ESLint clean
 
 ---
 
+## Roadmap
+
+| Target | Status |
+|--------|--------|
+| Linux / macOS support | Planned |
+| NAS / network share backup | Planned |
+| Block-level deduplication | Under consideration |
+| Cloud sync option (opt-in, encrypted) | Under consideration |
+| Multi-language UI | Future |
+| Mobile companion app (read-only status) | Future |
+
+Have a suggestion? [Open a feature request](https://github.com/Egyan07/GhostBackup/issues/new?template=feature_request.yml).
+
+---
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) for full text.
