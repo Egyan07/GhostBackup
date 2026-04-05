@@ -3,6 +3,18 @@
   "version": "3.3.0",
   "description": "SharePoint daily auto-backup system for Red Parrot Accounting",
   "author": "Egyan07",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Egyan07/GhostBackup.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Egyan07/GhostBackup/issues"
+  },
+  "homepage": "https://github.com/Egyan07/GhostBackup#readme",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -13,6 +25,10 @@
     "build:electron": "npm run build && electron-builder",
     "preview": "vite preview",
     "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css}\" \"electron/**/*.{js,mjs}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css}\" \"electron/**/*.{js,mjs}\"",
+    "prepare": "husky",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vite.config.mjs && vitest run --config vitest.electron.config.mjs",
     "test:frontend": "vitest run --config vite.config.mjs",
