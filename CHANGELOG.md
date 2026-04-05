@@ -4,6 +4,22 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v3.4.0 — CSP Hardening, Input Validation & Release Automation
+
+### Security
+- **Fine-grained CSP directives**: replaced broad `default-src 'self'` with 10 specific directives — `script-src 'self'`, `style-src 'self' 'unsafe-inline'`, `connect-src` pinned to API ports only, `object-src 'none'`, `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'`.
+- **30 new input validation tests** (`test_input_validation.py`): path traversal (8 tests), oversized payloads/JSON bombs (5), shell/config injection (10), auth edge cases (7).
+- **15 new Electron CSP behavioral tests** (`csp.test.mjs`): validates each directive is present and correctly configured in production headers.
+
+### CI/CD
+- **Release automation**: `build.yml` now auto-generates release notes from commits on tag push.
+- **Release notes workflow** (`release-notes.yml`): appends SHA256 checksum of installer and installation instructions to every published release.
+
+### Testing
+- **675+ tests passing** — 407 backend + 260+ frontend + 77 electron.
+
+---
+
 ## v3.3.0 — Test Coverage, Code Quality & CI Fixes
 
 ### Testing

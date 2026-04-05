@@ -1,6 +1,6 @@
 {
   "name": "ghostbackup",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "SharePoint daily auto-backup system for Red Parrot Accounting",
   "author": "Egyan07",
   "license": "MIT",
