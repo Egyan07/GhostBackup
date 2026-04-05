@@ -2,7 +2,7 @@
 
 # API server
 fastapi==0.135.2
-uvicorn[standard]==0.34.0
+uvicorn[standard]==0.43.0
 
 # Scheduling
 APScheduler==3.10.4
