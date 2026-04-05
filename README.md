@@ -216,49 +216,20 @@ If you prefer to install manually or use your existing Python/Node environments:
 ## 🧪 Testing
 
 ```bash
-# Backend — 377 tests, 90% line coverage
-cd backend
-python -m pytest tests/ -v --cov=. --cov-report=term-missing
-
-# Frontend — 260+ tests
-npm run test:frontend
-
-# Electron — 62 behavioral tests
-npm run test:electron
-
-# All tests
-npm test
-
-# Frontend — with coverage
-npm run test:coverage
-
-# Lint + format check
-npm run lint
-npm run format:check
+npm test                    # all tests (frontend + electron)
+npm run test:frontend       # 260+ vitest tests
+npm run test:electron       # 77 behavioral tests
+npm run test:coverage       # frontend with coverage
+cd backend && python -m pytest tests/ -v --cov=.  # 407 backend tests
 ```
 
-| Suite | Tests | Coverage | Type | CI |
-|-------|-------|----------|------|----|
-| Backend | 377 | 90% line | Unit + integration | ✅ GitHub Actions |
-| Frontend | 260+ | 75%+ stmt | Unit (Vitest + Testing Library) | ✅ GitHub Actions |
-| Electron | 62 | — | Behavioral (IPC, preload, CSP) | ✅ GitHub Actions |
+| Suite | Tests | Coverage | CI |
+|-------|-------|----------|----|
+| Backend (pytest) | 407 | 90% line | ✅ |
+| Frontend (Vitest) | 260+ | 75%+ stmt | ✅ |
+| Electron (Vitest) | 77 | — | ✅ |
 
-**What's tested:**
-- Backup engine (scan, encrypt, copy, verify, prune)
-- API endpoints (auth, config, runs, restore, alerts)
-- Configuration management and audit logging
-- Scheduler and file watcher lifecycle
-- Email alert formatting and delivery
-- Failure threshold behavior
-- All 6 React pages (Dashboard, BackupConfig, LiveRun, LogsViewer, RestoreUI, Settings)
-- All components (AlertBell, ErrorBoundary, ErrBanner, StatusPill, Countdown, LoadingState)
-- Electron IPC round-trips, preload bridge, CSP headers, BrowserWindow security
-- Credential validation, notification server, env file parsing
-
-**What's not tested:**
-- End-to-end Electron → backend → disk pipeline (manual testing only)
-- Performance at scale beyond ~50GB
-- Multi-drive failure scenarios
+Covers: backup engine, all API endpoints, all 6 pages, all 8 components, IPC/preload/CSP, input validation, and auth edge cases. Not covered: full E2E Electron-to-disk pipeline (manual only).
 
 ---
 
@@ -308,67 +279,32 @@ npm run format:check
 
 ## 🔌 API Endpoints
 
-All endpoints require the **X-API-Key header** except `/health`.
+All endpoints require the **X-API-Key header** except `/health`. Full OpenAPI schema available at `/openapi.json` when the backend is running.
 
-**Core**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /health | Health check (no auth required) |
-| GET | /dashboard | Dashboard summary stats |
-
-**Backup Runs**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /run/start | Start a backup run |
-| POST | /run/stop | Cancel the active run |
-| GET | /run/status | Active run state |
-| POST | /verify | Re-hash all backed-up files and return verified/corrupt/missing counts |
-| GET | /runs | Backup run history |
-| GET | /runs/:id | Single run detail |
-| GET | /runs/:id/logs | Per-file log entries for a run |
-
-**Restore**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /restore | Restore files (path traversal validated) |
-
-**Configuration**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /config | Current configuration |
-| PATCH | /config | Update configuration |
-| GET | /config/audit | Configuration change audit trail |
-| POST | /config/sites | Add a backup source folder |
-| PATCH | /config/sites/:name | Update a source folder |
-| DELETE | /config/sites/:name | Remove a source folder |
-
-**Settings**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| PATCH | /settings/smtp | Update SMTP email settings |
-| POST | /settings/smtp/test | Send a test email |
-| PATCH | /settings/retention | Update retention policy |
-| POST | /settings/prune | Manually trigger prune job |
-| POST | /settings/encryption/generate-key | Generate a new encryption key |
-| GET | /settings/drill-status | Restore drill status and history |
-
-**Monitoring**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /health/deep | Comprehensive health check for monitoring tools |
-| GET | /ssd/status | Disk usage and health for configured drives |
-| GET | /alerts | In-app alert list |
-| POST | /alerts/:id/dismiss | Dismiss a single alert |
-| POST | /alerts/dismiss-all | Dismiss all alerts |
-| GET | /watcher/status | File watcher running state |
-| POST | /watcher/start | Start file watcher |
-| POST | /watcher/stop | Stop file watcher |
+| Group | Method | Endpoint | Description |
+|-------|--------|----------|-------------|
+| Core | GET | /health | Health check (no auth) |
+| Core | GET | /dashboard | Dashboard summary stats |
+| Core | GET | /health/deep | Comprehensive health check |
+| Runs | POST | /run/start | Start a backup run |
+| Runs | POST | /run/stop | Cancel the active run |
+| Runs | GET | /run/status | Active run state |
+| Runs | GET | /runs | Backup run history |
+| Runs | GET | /runs/:id/logs | Log entries for a run |
+| Runs | POST | /verify | Re-hash all backups, return counts |
+| Restore | POST | /restore | Restore files (path traversal validated) |
+| Config | GET | /config | Current configuration |
+| Config | PATCH | /config | Update configuration |
+| Config | GET | /config/audit | Configuration change audit trail |
+| Config | POST | /config/sites | Add a source folder |
+| Settings | PATCH | /settings/smtp | Update SMTP settings |
+| Settings | POST | /settings/smtp/test | Send a test email |
+| Settings | PATCH | /settings/retention | Update retention policy |
+| Settings | POST | /settings/prune | Trigger prune job |
+| Monitor | GET | /ssd/status | Disk usage and health |
+| Monitor | GET | /alerts | In-app alert list |
+| Monitor | POST | /alerts/dismiss-all | Dismiss all alerts |
+| Monitor | GET | /watcher/status | File watcher state |
 
 ---
 
@@ -377,34 +313,7 @@ All endpoints require the **X-API-Key header** except `/health`.
 Location: `backend/config/config.yaml`
 Template: `backend/config/config.yaml.example`
 
-```yaml
-ssd_path: "D:\\GhostBackup"
-secondary_ssd_path: "E:\\GhostBackup2"   # optional — leave blank to disable
-
-encryption:
-  enabled: true   # requires GHOSTBACKUP_ENCRYPTION_KEY in .env.local
-
-sources:
-  - label: "Client Records"
-    path: "C:\\Users\\admin\\SharePoint\\Red Parrot\\Clients"
-    enabled: true
-
-retention:
-  daily_days: 365         # keep daily backups for 1 year
-  weekly_days: 2555       # keep weekly backups for 7 years
-  compliance_years: 7     # minimum retention floor
-  guard_days: 7           # prevent accidental deletion of recent backups
-
-schedule:
-  time: "08:00"
-  timezone: "Europe/London"
-
-circuit_breaker_threshold: 0.05   # abort library if >5% of files fail
-
-watcher:
-  debounce_seconds: 15    # wait this long after the last change before triggering a backup
-  cooldown_seconds: 120   # minimum gap between two watcher-triggered backup runs
-```
+See `backend/config/config.yaml.example` for all options including SSD paths, encryption, sources, retention, schedule, circuit breaker threshold, and watcher settings.
 
 ---
 
@@ -412,20 +321,13 @@ watcher:
 
 The encryption key is stored in Windows Credential Manager by default. `.env.local` is used as a fallback for CI/headless environments and must never be committed (already in `.gitignore`).
 
-```bash
-GHOSTBACKUP_ENCRYPTION_KEY=your-base64-key-here
-GHOSTBACKUP_SMTP_PASSWORD=your-smtp-password
-# GHOSTBACKUP_API_PORT=8765
-```
-
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GHOSTBACKUP_ENCRYPTION_KEY` | Yes (if encryption enabled) | Base64-encoded Fernet key — HKDF-derived to 256-bit AES. Generated by `install.bat` and stored in Windows Credential Manager by default. Set in `.env.local` for CI/headless environments. **If lost from all locations, all encrypted backups are unrecoverable.** |
-| `GHOSTBACKUP_HKDF_SALT` | No (recommended for new installs) | Per-installation salt for HKDF AES key derivation. Set on first install to strengthen key isolation. Falls back to a static default for backward compatibility with existing encrypted backups. |
-| `GHOSTBACKUP_SMTP_PASSWORD` | Yes (if email alerts enabled) | SMTP password. For Gmail, use an App Password. |
-| `GHOSTBACKUP_API_PORT` | No (default: 8765) | Port for the FastAPI backend. |
-| `GHOSTBACKUP_API_TOKEN` | Auto | Generated by Electron on each launch. Do not set manually. |
-| `GHOSTBACKUP_DB_PATH` | No (default: `backend/ghostbackup.db`) | Override the SQLite database path. Useful when running the backend standalone outside the project directory. |
+| `GHOSTBACKUP_ENCRYPTION_KEY` | Yes (if encryption enabled) | AES-256 key stored in Windows Credential Manager. **If lost, all encrypted backups are unrecoverable.** |
+| `GHOSTBACKUP_HKDF_SALT` | Recommended | Per-installation salt for key derivation isolation. |
+| `GHOSTBACKUP_SMTP_PASSWORD` | Yes (if email enabled) | SMTP password. For Gmail, use an App Password. |
+| `GHOSTBACKUP_API_PORT` | No (default: 8765) | FastAPI backend port. |
+| `GHOSTBACKUP_API_TOKEN` | Auto | Generated by Electron per launch. Do not set manually. |
 
 ---
 
@@ -449,21 +351,21 @@ GhostBackup/
 │   ├── syncer.py            ← backup engine (scan, encrypt, copy, verify, prune)
 │   ├── utils.py             ← shared helpers (fmt_bytes, fmt_duration)
 │   ├── watcher.py           ← watchdog real-time file watcher
-│   └── tests/               ← 368 pytest tests (510 total with frontend)
+│   └── tests/               ← 407 pytest tests
 │
 ├── electron/
 │   ├── main.js              ← Electron main process (spawns backend, tray)
 │   └── preload.js           ← contextBridge API surface
 │
 ├── src/
-│   ├── GhostBackup.jsx      ← app shell + sidebar navigation
-│   ├── main.jsx             ← React entry point + backend health poller
-│   ├── api-client.js        ← authenticated fetch wrapper
+│   ├── GhostBackup.tsx      ← app shell + sidebar navigation
+│   ├── main.tsx             ← React entry point + backend health poller
+│   ├── api-client.ts        ← authenticated fetch wrapper (typed)
+│   ├── types.ts             ← shared TypeScript interfaces
 │   ├── styles.css           ← application styles
-│   ├── splash.css           ← splash/loading screen styles
-│   ├── components/          ← reusable UI components
-│   ├── pages/               ← full-page views (Dashboard, Restore, Settings, etc.)
-│   └── tests/               ← 142 vitest tests (510 total with backend)
+│   ├── components/          ← reusable UI components (8 .tsx files)
+│   ├── pages/               ← full-page views (6 .tsx files)
+│   └── tests/               ← 260+ vitest tests
 │
 ├── screenshots/             ← README screenshots
 ├── OFFSITE.md               ← offsite backup guide
@@ -481,7 +383,7 @@ GhostBackup/
 | Encryption | AES-256-GCM via Python `cryptography` library. Streaming with constant memory. Per-file random nonce (`os.urandom`). Versioned header (v1) for key rotation support. Per-installation HKDF salt generated at setup for stronger key derivation isolation. **Fail-hard mode:** if encryption is enabled but key is missing or broken, the app refuses to start — no silent fallback to unencrypted backups. |
 | API Authentication | Session token via `crypto.randomBytes(32)` per launch. Validated with `hmac.compare_digest` (timing-safe). Rate limiting on sensitive endpoints (slowapi). |
 | Path Safety | Restore endpoint validates all paths against traversal attacks before any file operation. |
-| Electron Sandbox | Chromium sandbox enabled. CSP enforced in both dev and production builds. |
+| Electron Sandbox | Chromium sandbox enabled. Fine-grained CSP with 10 directives: `script-src 'self'`, `connect-src` pinned to API port, `object-src 'none'`, `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'`. |
 | Credential Storage | Secrets in `.env.local` with input sanitization on writes. Excluded from version control. |
 | Database Integrity | SQLite with `PRAGMA synchronous=FULL`. File records committed every 100 inserts during a run — crash data loss limited to at most 100 files. WAL checkpoint after every run prevents unbounded WAL growth. Schema versioned with incremental delta migrations. Manifest DB backed up to SSD with 3-copy rotation after every run. |
 | Key Rotation Safety | Each backed-up file stores a SHA-256 fingerprint of the encryption key used. On restore, a fingerprint mismatch triggers a warning — detects silent restore failures after key rotation. |
@@ -532,73 +434,18 @@ Open a GitHub issue or contact the author directly. Do not include exploit detai
 
 ## 🛠 Troubleshooting
 
-**Q: I get "port already in use" every time I open the app.**
-
-**A:** Closing with the X button hides the app to tray — it was still running. Always quit via File → Exit or right-click tray icon → Quit GhostBackup. This fully exits and releases port 8765.
-
----
-
-**Q: The splash screen shows "backup service stopped unexpectedly (exit code 1)".**
-
-**A:** Your Python dependencies are out of sync. Run:
-```
-pip install -r backend/requirements.txt
-```
-Then relaunch via `start.bat`.
-
----
-
-**Q: Email alerts aren't arriving.**
-
-**A:** If using Gmail, you need an App Password — not your regular password. Generate one at `https://myaccount.google.com/apppasswords`. In Settings configure: SMTP host `smtp.gmail.com`, port `587`, your Gmail in both From and Recipients. Save, then click Send Test Email.
-
----
-
-**Q: The backup isn't running at the scheduled time.**
-
-**A:** Check the sidebar status dot — green means running, grey/red means stopped (restart the app). Also verify `schedule.time` and `schedule.timezone` in `config.yaml` match your intended schedule.
-
----
-
-**Q: The dashboard shows "No runs yet" even after a backup completed.**
-
-**A:** The dashboard reads from `backend/ghostbackup.db`. If you moved or deleted this file, history is lost. Do not delete it — it contains your entire backup run history and audit trail.
-
----
-
-**Q: A file was backed up but I can't find it on the SSD.**
-
-**A:** Encrypted backups are stored with a `.ghostenc` extension and are not human-readable. Restore them through GhostBackup's Restore page — do not try to open them directly.
-
----
-
-**Q: Can I back up to a network share or NAS?**
-
-**A:** No. GhostBackup currently supports only directly attached drives. Network and cloud backup are not supported.
-
----
-
-**Q: What happens if power is lost during a backup?**
-
-**A:** The current run is marked as failed. SQLite uses `PRAGMA synchronous=FULL` so the database will not corrupt. On next launch, run a new backup normally — partially written files will be re-copied.
-
----
-
-**Q: How do I update GhostBackup?**
-
-**A:** Pull the latest changes and reinstall dependencies:
-```bash
-git pull
-pip install -r backend/requirements.txt
-npm install --legacy-peer-deps
-```
-Your `config.yaml` and `.env.local` will not be overwritten.
-
----
-
-**Q: Where are the log files for undiagnosed issues?**
-
-**A:** Logs are written to `backend/logs/` and also visible in the app under Logs & History. For backend errors not shown in the UI, check `backend/logs/ghostbackup.log`. You can filter by INFO, WARN, and ERROR levels in the Logs page.
+| Problem | Fix |
+|---------|-----|
+| "Port already in use" | Quit via tray icon → Quit GhostBackup (X button just hides to tray) |
+| "Backup service stopped unexpectedly" | Run `pip install -r backend/requirements.txt` then relaunch |
+| Email alerts not arriving | Gmail needs an App Password, not your regular password. Host: `smtp.gmail.com`, port: `587` |
+| Backup not running on schedule | Check sidebar status dot is green. Verify `schedule.time` and `schedule.timezone` in `config.yaml` |
+| "No runs yet" after backup | Don't delete `backend/ghostbackup.db` — it stores all run history |
+| Can't find backed-up file on SSD | Encrypted files use `.ghostenc` extension. Restore via the app, don't open directly |
+| Network share / NAS? | Not supported. Local drives only |
+| Power loss during backup | Run is marked failed, DB won't corrupt. Re-run backup on next launch |
+| How to update | `git pull && pip install -r backend/requirements.txt && npm install --legacy-peer-deps` |
+| Log files | `backend/logs/ghostbackup.log` or Logs & History page in the app |
 
 ---
 
