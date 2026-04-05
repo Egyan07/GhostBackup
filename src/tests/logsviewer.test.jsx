@@ -14,15 +14,15 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 // Hoisted API mock
 // ---------------------------------------------------------------------------
 const apiMocks = vi.hoisted(() => ({
-  getRuns:    vi.fn(),
-  getRun:     vi.fn(),
+  getRuns: vi.fn(),
+  getRun: vi.fn(),
   getRunLogs: vi.fn(),
 }));
 
 vi.mock("../api-client", () => ({
   default: {
-    getRuns:    apiMocks.getRuns,
-    getRun:     apiMocks.getRun,
+    getRuns: apiMocks.getRuns,
+    getRun: apiMocks.getRun,
     getRunLogs: apiMocks.getRunLogs,
   },
 }));
@@ -30,9 +30,20 @@ vi.mock("../api-client", () => ({
 // ---------------------------------------------------------------------------
 // Stub child components
 // ---------------------------------------------------------------------------
-vi.mock("../components/StatusPill",   () => ({ default: ({ status }) => <span data-testid="status-pill">{status}</span> }));
-vi.mock("../components/ErrBanner",    () => ({ default: ({ error, onDismiss }) => error ? <div data-testid="err-banner" onClick={onDismiss}>{typeof error === "string" ? error : error?.message ?? String(error)}</div> : null }));
-vi.mock("../components/LoadingState", () => ({ default: () => <div data-testid="loading-state" /> }));
+vi.mock("../components/StatusPill", () => ({
+  default: ({ status }) => <span data-testid="status-pill">{status}</span>,
+}));
+vi.mock("../components/ErrBanner", () => ({
+  default: ({ error, onDismiss }) =>
+    error ? (
+      <div data-testid="err-banner" onClick={onDismiss}>
+        {typeof error === "string" ? error : (error?.message ?? String(error))}
+      </div>
+    ) : null,
+}));
+vi.mock("../components/LoadingState", () => ({
+  default: () => <div data-testid="loading-state" />,
+}));
 
 import LogsViewer from "../pages/LogsViewer";
 
@@ -60,18 +71,18 @@ const RUN_2 = {
 };
 
 const LOGS = [
-  { logged_at: "2025-06-01T03:00:01", level: "INFO",  message: "Backup started" },
-  { logged_at: "2025-06-01T03:00:05", level: "INFO",  message: "Scanning Documents folder" },
-  { logged_at: "2025-06-01T03:01:00", level: "WARN",  message: "Skipped locked file: data.db" },
+  { logged_at: "2025-06-01T03:00:01", level: "INFO", message: "Backup started" },
+  { logged_at: "2025-06-01T03:00:05", level: "INFO", message: "Scanning Documents folder" },
+  { logged_at: "2025-06-01T03:01:00", level: "WARN", message: "Skipped locked file: data.db" },
   { logged_at: "2025-06-01T03:02:10", level: "ERROR", message: "Failed to transfer report.xlsx" },
-  { logged_at: "2025-06-01T03:02:10", level: "INFO",  message: "Backup completed" },
+  { logged_at: "2025-06-01T03:02:10", level: "INFO", message: "Backup completed" },
 ];
 
 const RUN_1_DETAIL = {
   ...RUN_1,
   folder_summary: {
     Documents: { files_transferred: 300, files_failed: 0 },
-    Photos:    { files_transferred: 200, files_failed: 0 },
+    Photos: { files_transferred: 200, files_failed: 0 },
   },
 };
 
@@ -91,7 +102,11 @@ beforeEach(() => {
 describe("LogsViewer — loading state", () => {
   it("shows LoadingState while runs are fetching", async () => {
     let resolve;
-    apiMocks.getRuns.mockReturnValue(new Promise(r => { resolve = r; }));
+    apiMocks.getRuns.mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      })
+    );
     render(<LogsViewer />);
     expect(screen.getByTestId("loading-state")).toBeTruthy();
     await waitFor(() => resolve([RUN_1]));
@@ -142,8 +157,8 @@ describe("LogsViewer — run history panel", () => {
   it("renders run list with run IDs", async () => {
     render(<LogsViewer />);
     await waitFor(() => {
-      expect(screen.getByText(/Run #1/)).toBeTruthy();
-      expect(screen.getByText(/Run #2/)).toBeTruthy();
+      expect(screen.getAllByText(/Run #1/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Run #2/).length).toBeGreaterThan(0);
     });
   });
 
@@ -151,7 +166,7 @@ describe("LogsViewer — run history panel", () => {
     render(<LogsViewer />);
     await waitFor(() => {
       const pills = screen.getAllByTestId("status-pill");
-      const texts = pills.map(p => p.textContent);
+      const texts = pills.map((p) => p.textContent);
       expect(texts).toContain("success");
       expect(texts).toContain("failed");
     });
@@ -168,8 +183,8 @@ describe("LogsViewer — run history panel", () => {
   it("shows run date and duration", async () => {
     render(<LogsViewer />);
     await waitFor(() => {
-      expect(screen.getByText(/2025-06-01/)).toBeTruthy();
-      expect(screen.getByText(/2m 10s/)).toBeTruthy();
+      expect(screen.getAllByText(/2025-06-01/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/2m 10s/).length).toBeGreaterThan(0);
     });
   });
 
@@ -228,8 +243,8 @@ describe("LogsViewer — log display", () => {
 
   it("shows selected run info in title", async () => {
     render(<LogsViewer />);
-    await waitFor(() => expect(screen.getByText(/Run #1/)).toBeTruthy());
-    expect(screen.getByText(/2025-06-01/)).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByText(/Run #1/).length).toBeGreaterThan(0));
+    expect(screen.getAllByText(/2025-06-01/).length).toBeGreaterThan(0);
   });
 
   it("shows No logs found when log list is empty", async () => {
@@ -260,7 +275,7 @@ describe("LogsViewer — filter buttons", () => {
 
     // Click the WARN button (there are multiple elements with text WARN — one is filter button, one is log level)
     const buttons = screen.getAllByText("WARN");
-    const warnButton = buttons.find(el => el.tagName === "BUTTON");
+    const warnButton = buttons.find((el) => el.tagName === "BUTTON");
     fireEvent.click(warnButton);
 
     await waitFor(() => {
@@ -274,13 +289,13 @@ describe("LogsViewer — filter buttons", () => {
 
     // First click a specific level
     const errorButtons = screen.getAllByText("ERROR");
-    const errorButton = errorButtons.find(el => el.tagName === "BUTTON");
+    const errorButton = errorButtons.find((el) => el.tagName === "BUTTON");
     fireEvent.click(errorButton);
     await waitFor(() => expect(apiMocks.getRunLogs).toHaveBeenCalledWith(1, "ERROR"));
 
     apiMocks.getRunLogs.mockClear();
     const allButtons = screen.getAllByText("ALL");
-    const allButton = allButtons.find(el => el.tagName === "BUTTON");
+    const allButton = allButtons.find((el) => el.tagName === "BUTTON");
     fireEvent.click(allButton);
     await waitFor(() => expect(apiMocks.getRunLogs).toHaveBeenCalledWith(1, undefined));
   });
@@ -376,7 +391,7 @@ describe("LogsViewer — run summary", () => {
     render(<LogsViewer />);
     await waitFor(() => {
       const pills = screen.getAllByTestId("status-pill");
-      expect(pills.some(p => p.textContent === "success")).toBe(true);
+      expect(pills.some((p) => p.textContent === "success")).toBe(true);
     });
   });
 });

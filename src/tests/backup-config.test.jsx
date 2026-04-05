@@ -55,12 +55,20 @@ describe("BackupConfig", () => {
     render(<BackupConfig />);
 
     fireEvent.click(await screen.findByText("+ Add Folder"));
-    fireEvent.change(screen.getByPlaceholderText("e.g. Client Documents"), { target: { value: "Clients" } });
-    fireEvent.change(screen.getByPlaceholderText("C:\\Users\\Shared\\Documents"), { target: { value: "/data/clients" } });
+    fireEvent.change(screen.getByPlaceholderText("e.g. Client Documents"), {
+      target: { value: "Clients" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("C:\\Users\\Shared\\Documents"), {
+      target: { value: "/data/clients" },
+    });
     fireEvent.click(screen.getByText("Add Folder"));
 
     await waitFor(() => {
-      expect(apiMocks.addSite).toHaveBeenCalledWith({ label: "Clients", path: "/data/clients", enabled: true });
+      expect(apiMocks.addSite).toHaveBeenCalledWith({
+        label: "Clients",
+        path: "/data/clients",
+        enabled: true,
+      });
     });
 
     await waitFor(() => {

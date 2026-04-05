@@ -45,7 +45,12 @@ describe("ApiError", () => {
   });
 
   it("stores optional fix", () => {
-    const err = new ApiError(409, "Backup already in progress", "GB-E020", "Wait for the current run to finish");
+    const err = new ApiError(
+      409,
+      "Backup already in progress",
+      "GB-E020",
+      "Wait for the current run to finish"
+    );
     expect(err.fix).toBe("Wait for the current run to finish");
   });
 
@@ -70,10 +75,7 @@ describe("request() — success", () => {
 
     await request("GET", "/health");
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:9876/health",
-      expect.any(Object)
-    );
+    expect(global.fetch).toHaveBeenCalledWith("http://127.0.0.1:9876/health", expect.any(Object));
   });
 
   it("falls back to the default base URL without Electron apiUrl", async () => {
@@ -87,10 +89,7 @@ describe("request() — success", () => {
 
     await request("GET", "/health");
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:8765/health",
-      expect.any(Object)
-    );
+    expect(global.fetch).toHaveBeenCalledWith("http://127.0.0.1:8765/health", expect.any(Object));
   });
 
   it("sends X-API-Key header with the token", async () => {
@@ -199,7 +198,7 @@ describe("request() — success", () => {
       ok: true,
       status: 200,
       headers: { get: () => null },
-      json: async () => ([]),
+      json: async () => [],
     });
 
     await request("GET", "/runs", null, { limit: 10, offset: 0 });
@@ -214,7 +213,7 @@ describe("request() — success", () => {
       ok: true,
       status: 200,
       headers: { get: () => null },
-      json: async () => ([]),
+      json: async () => [],
     });
 
     await request("GET", "/runs", null, { limit: 10, offset: null });
@@ -228,7 +227,9 @@ describe("request() — success", () => {
       ok: true,
       status: 204,
       headers: { get: () => null },
-      json: async () => { throw new Error("no body"); },
+      json: async () => {
+        throw new Error("no body");
+      },
     });
 
     const result = await request("DELETE", "/config/sites/old");

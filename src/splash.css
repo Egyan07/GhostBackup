@@ -1,4 +1,10 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 body.splash-active {
   background: #0d0f12;
@@ -10,14 +16,16 @@ body.splash-active {
   color: #e8eaf0;
 }
 
-.splash { text-align: center; }
+.splash {
+  text-align: center;
+}
 
 .logo {
   font-size: 32px;
   font-weight: 800;
   color: #00e5cc;
   letter-spacing: -1px;
-  font-family: 'Syne', sans-serif;
+  font-family: "Syne", sans-serif;
 }
 
 .sub {
@@ -45,8 +53,13 @@ body.splash-active {
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.2; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
 }
 
 .error {

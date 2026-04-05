@@ -9,21 +9,21 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+// userEvent available if needed for future interaction tests
 
 // ---------------------------------------------------------------------------
 // Hoisted API mock
 // ---------------------------------------------------------------------------
 const apiMocks = vi.hoisted(() => ({
-  getAlerts:       vi.fn(),
-  dismissAlert:    vi.fn(),
+  getAlerts: vi.fn(),
+  dismissAlert: vi.fn(),
   dismissAllAlerts: vi.fn(),
 }));
 
 vi.mock("../api-client", () => ({
   default: {
-    getAlerts:        apiMocks.getAlerts,
-    dismissAlert:     apiMocks.dismissAlert,
+    getAlerts: apiMocks.getAlerts,
+    dismissAlert: apiMocks.dismissAlert,
     dismissAllAlerts: apiMocks.dismissAllAlerts,
   },
 }));
@@ -37,23 +37,52 @@ const EMPTY_ALERTS = { alerts: [], unread_count: 0 };
 
 const TWO_ALERTS = {
   alerts: [
-    { id: 1, level: "info",  title: "Backup completed", body: "Run #10 finished successfully", ts: "2025-06-01T10:00:00Z", run_id: 10, dismissed: false },
-    { id: 2, level: "error", title: "SSD disconnected", body: "Target drive not found",        ts: "2025-06-01T11:00:00Z", run_id: null, dismissed: false },
+    {
+      id: 1,
+      level: "info",
+      title: "Backup completed",
+      body: "Run #10 finished successfully",
+      ts: "2025-06-01T10:00:00Z",
+      run_id: 10,
+      dismissed: false,
+    },
+    {
+      id: 2,
+      level: "error",
+      title: "SSD disconnected",
+      body: "Target drive not found",
+      ts: "2025-06-01T11:00:00Z",
+      run_id: null,
+      dismissed: false,
+    },
   ],
   unread_count: 2,
 };
 
 const CRITICAL_ALERT = {
   alerts: [
-    { id: 3, level: "critical", title: "Encryption key missing", body: "Cannot proceed", ts: "2025-06-01T12:00:00Z", dismissed: false },
+    {
+      id: 3,
+      level: "critical",
+      title: "Encryption key missing",
+      body: "Cannot proceed",
+      ts: "2025-06-01T12:00:00Z",
+      dismissed: false,
+    },
   ],
   unread_count: 1,
 };
 
 const MIXED_ALERTS = {
   alerts: [
-    { id: 4, level: "warn",  title: "Low disk space",   body: "Only 5 GB remaining", dismissed: false },
-    { id: 5, level: "info",  title: "Update available",  body: "v9.5 is out",        dismissed: true },
+    {
+      id: 4,
+      level: "warn",
+      title: "Low disk space",
+      body: "Only 5 GB remaining",
+      dismissed: false,
+    },
+    { id: 5, level: "info", title: "Update available", body: "v9.5 is out", dismissed: true },
   ],
   unread_count: 1,
 };
@@ -298,7 +327,7 @@ describe("AlertBell — run ID display", () => {
     apiMocks.getAlerts.mockResolvedValue(TWO_ALERTS);
     render(<AlertBell />);
     fireEvent.click(screen.getByText("🔔"));
-    await waitFor(() => expect(screen.getByText(/Run #10/)).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText(/Run #10/).length).toBeGreaterThan(0));
   });
 });
 
@@ -335,27 +364,41 @@ describe("AlertBell — refresh", () => {
 // Polling
 // ---------------------------------------------------------------------------
 describe("AlertBell — polling", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("polls for alerts every 15 seconds", async () => {
     // Mock document.visibilityState
     Object.defineProperty(document, "visibilityState", { value: "visible", writable: true });
     apiMocks.getAlerts.mockResolvedValue(EMPTY_ALERTS);
     render(<AlertBell />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMocks.getAlerts).toHaveBeenCalledTimes(1);
-    await act(async () => { vi.advanceTimersByTime(15000); await Promise.resolve(); });
+    await act(async () => {
+      vi.advanceTimersByTime(15000);
+      await Promise.resolve();
+    });
     expect(apiMocks.getAlerts).toHaveBeenCalledTimes(2);
   });
 
   it("cleans up interval on unmount", async () => {
     apiMocks.getAlerts.mockResolvedValue(EMPTY_ALERTS);
     const { unmount } = render(<AlertBell />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMocks.getAlerts).toHaveBeenCalledTimes(1);
     unmount();
-    await act(async () => { vi.advanceTimersByTime(15000); await Promise.resolve(); });
+    await act(async () => {
+      vi.advanceTimersByTime(15000);
+      await Promise.resolve();
+    });
     expect(apiMocks.getAlerts).toHaveBeenCalledTimes(1);
   });
 });

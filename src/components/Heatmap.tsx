@@ -7,7 +7,7 @@ interface HeatmapProps {
 export default function Heatmap({ runs }: HeatmapProps) {
   return (
     <div className="heatmap">
-      {runs.map(r => (
+      {runs.map((r) => (
         <div
           key={r.id}
           className={`hm-day ${r.status || "none"}`}

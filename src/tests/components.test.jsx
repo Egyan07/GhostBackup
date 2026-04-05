@@ -8,9 +8,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
-import ErrBanner    from "../components/ErrBanner";
-import StatusPill   from "../components/StatusPill";
-import Countdown    from "../components/Countdown";
+import ErrBanner from "../components/ErrBanner";
+import StatusPill from "../components/StatusPill";
+import Countdown from "../components/Countdown";
 import LoadingState from "../components/LoadingState";
 
 // ── ErrBanner ─────────────────────────────────────────────────────────────────
@@ -217,7 +217,9 @@ describe("Countdown", () => {
     render(<Countdown nextRun={nextRun} />);
     const before = screen.getByText(/\d{2}:\d{2}:\d{2}/).textContent;
 
-    act(() => { vi.advanceTimersByTime(1000); });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
 
     const after = screen.getByText(/\d{2}:\d{2}:\d{2}/).textContent;
     expect(before).not.toBe(after);
@@ -254,7 +256,7 @@ describe("Countdown", () => {
 
   it("cleans up interval on unmount", () => {
     const clearSpy = vi.spyOn(global, "clearInterval");
-    const nextRun  = new Date(Date.now() + 3_600_000).toISOString();
+    const nextRun = new Date(Date.now() + 3_600_000).toISOString();
     const { unmount } = render(<Countdown nextRun={nextRun} />);
     unmount();
     expect(clearSpy).toHaveBeenCalled();
@@ -311,12 +313,20 @@ describe("PageErrorBoundary", () => {
   });
 
   it("renders children when no error", () => {
-    render(<PageErrorBoundary pageName="Dashboard"><WorkingPage /></PageErrorBoundary>);
+    render(
+      <PageErrorBoundary pageName="Dashboard">
+        <WorkingPage />
+      </PageErrorBoundary>
+    );
     expect(screen.getByText("Working")).toBeTruthy();
   });
 
   it("shows page-level error with retry button on crash", () => {
-    render(<PageErrorBoundary pageName="Dashboard"><BrokenPage /></PageErrorBoundary>);
+    render(
+      <PageErrorBoundary pageName="Dashboard">
+        <BrokenPage />
+      </PageErrorBoundary>
+    );
     expect(screen.getByText(/Dashboard failed to load/)).toBeTruthy();
     expect(screen.getByText("Reload Page")).toBeTruthy();
   });
@@ -327,7 +337,11 @@ describe("PageErrorBoundary", () => {
       if (shouldThrow) throw new Error("boom");
       return <div>Recovered</div>;
     }
-    render(<PageErrorBoundary pageName="Test"><MaybeBroken /></PageErrorBoundary>);
+    render(
+      <PageErrorBoundary pageName="Test">
+        <MaybeBroken />
+      </PageErrorBoundary>
+    );
     expect(screen.getByText(/Test failed to load/)).toBeTruthy();
     shouldThrow = false;
     fireEvent.click(screen.getByText("Reload Page"));

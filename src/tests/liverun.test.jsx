@@ -15,23 +15,32 @@ import { render, screen, waitFor, fireEvent, act } from "@testing-library/react"
 // ---------------------------------------------------------------------------
 const apiMocks = vi.hoisted(() => ({
   runStatus: vi.fn(),
-  startRun:  vi.fn(),
-  stopRun:   vi.fn(),
+  startRun: vi.fn(),
+  stopRun: vi.fn(),
 }));
 
 vi.mock("../api-client", () => ({
   default: {
     runStatus: apiMocks.runStatus,
-    startRun:  apiMocks.startRun,
-    stopRun:   apiMocks.stopRun,
+    startRun: apiMocks.startRun,
+    stopRun: apiMocks.stopRun,
   },
 }));
 
 // ---------------------------------------------------------------------------
 // Stub child components
 // ---------------------------------------------------------------------------
-vi.mock("../components/StatusPill",  () => ({ default: ({ status }) => <span data-testid="status-pill">{status}</span> }));
-vi.mock("../components/ErrBanner",   () => ({ default: ({ error, onDismiss }) => error ? <div data-testid="err-banner" onClick={onDismiss}>{typeof error === "string" ? error : error?.message ?? String(error)}</div> : null }));
+vi.mock("../components/StatusPill", () => ({
+  default: ({ status }) => <span data-testid="status-pill">{status}</span>,
+}));
+vi.mock("../components/ErrBanner", () => ({
+  default: ({ error, onDismiss }) =>
+    error ? (
+      <div data-testid="err-banner" onClick={onDismiss}>
+        {typeof error === "string" ? error : (error?.message ?? String(error))}
+      </div>
+    ) : null,
+}));
 
 import LiveRun from "../pages/LiveRun";
 
@@ -56,22 +65,12 @@ const RUNNING_STATUS = {
   started_at: "2025-06-01T10:00:00Z",
   feed: [
     { time: "10:01", file: "Documents/report.pdf", size_mb: 1.5, library: "Documents" },
-    { time: "10:02", file: "Photos/img_001.jpg",   size_mb: 3.2, library: "Photos" },
+    { time: "10:02", file: "Photos/img_001.jpg", size_mb: 3.2, library: "Photos" },
   ],
   libraries: {
     Documents: { pct: 60 },
-    Photos:    { pct: 25 },
+    Photos: { pct: 25 },
   },
-};
-
-const COMPLETED_STATUS = {
-  status: "success",
-  overall_pct: 100,
-  files_transferred: 1200,
-  files_failed: 0,
-  bytes_transferred: 5368709120,
-  feed: [],
-  libraries: { Documents: { pct: 100 }, Photos: { pct: 100 } },
 };
 
 // ---------------------------------------------------------------------------
@@ -102,7 +101,7 @@ describe("LiveRun — idle state", () => {
     render(<LiveRun />);
     await waitFor(() => {
       const pills = screen.getAllByTestId("status-pill");
-      expect(pills.some(p => p.textContent === "idle")).toBe(true);
+      expect(pills.some((p) => p.textContent === "idle")).toBe(true);
     });
   });
 
@@ -150,7 +149,7 @@ describe("LiveRun — running state", () => {
     render(<LiveRun />);
     await waitFor(() => {
       const pills = screen.getAllByTestId("status-pill");
-      expect(pills.some(p => p.textContent === "running")).toBe(true);
+      expect(pills.some((p) => p.textContent === "running")).toBe(true);
     });
   });
 
@@ -193,8 +192,8 @@ describe("LiveRun — per-library progress", () => {
   it("renders library names", async () => {
     render(<LiveRun />);
     await waitFor(() => {
-      expect(screen.getByText("Documents")).toBeTruthy();
-      expect(screen.getByText("Photos")).toBeTruthy();
+      expect(screen.getAllByText("Documents").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Photos").length).toBeGreaterThan(0);
     });
   });
 
@@ -304,7 +303,11 @@ describe("LiveRun — start run", () => {
 
   it("shows Starting text while run is being started", async () => {
     let resolveStart;
-    apiMocks.startRun.mockReturnValue(new Promise(r => { resolveStart = r; }));
+    apiMocks.startRun.mockReturnValue(
+      new Promise((r) => {
+        resolveStart = r;
+      })
+    );
     render(<LiveRun />);
     await waitFor(() => expect(screen.getByText(/Run Incremental/)).toBeTruthy());
     fireEvent.click(screen.getByText(/Run Incremental/));
@@ -328,7 +331,11 @@ describe("LiveRun — stop run", () => {
   it("shows Stopping text while stop is in progress", async () => {
     apiMocks.runStatus.mockResolvedValue(RUNNING_STATUS);
     let resolveStop;
-    apiMocks.stopRun.mockReturnValue(new Promise(r => { resolveStop = r; }));
+    apiMocks.stopRun.mockReturnValue(
+      new Promise((r) => {
+        resolveStop = r;
+      })
+    );
     render(<LiveRun />);
     await waitFor(() => expect(screen.getByText(/Stop/)).toBeTruthy());
     fireEvent.click(screen.getByText(/Stop/));
@@ -358,8 +365,7 @@ describe("LiveRun — error handling", () => {
   });
 
   it("dismisses error on ErrBanner click", async () => {
-    apiMocks.runStatus.mockRejectedValueOnce(new Error("fail"))
-                      .mockResolvedValue(IDLE_STATUS);
+    apiMocks.runStatus.mockRejectedValueOnce(new Error("fail")).mockResolvedValue(IDLE_STATUS);
     render(<LiveRun />);
     await waitFor(() => expect(screen.getByTestId("err-banner")).toBeTruthy());
     fireEvent.click(screen.getByTestId("err-banner"));
@@ -371,29 +377,45 @@ describe("LiveRun — error handling", () => {
 // Polling behavior
 // ---------------------------------------------------------------------------
 describe("LiveRun — polling", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("polls status on mount", async () => {
     render(<LiveRun />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMocks.runStatus).toHaveBeenCalledTimes(1);
   });
 
   it("polls again after delay", async () => {
     render(<LiveRun />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMocks.runStatus).toHaveBeenCalledTimes(1);
-    await act(async () => { vi.advanceTimersByTime(5000); await Promise.resolve(); });
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
     expect(apiMocks.runStatus).toHaveBeenCalledTimes(2);
   });
 
   it("cleans up timeout on unmount", async () => {
     const { unmount } = render(<LiveRun />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMocks.runStatus).toHaveBeenCalledTimes(1);
     unmount();
-    await act(async () => { vi.advanceTimersByTime(5000); await Promise.resolve(); });
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
     expect(apiMocks.runStatus).toHaveBeenCalledTimes(1);
   });
 });

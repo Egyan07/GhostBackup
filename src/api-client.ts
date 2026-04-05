@@ -7,9 +7,18 @@
  */
 
 import type {
-  DashboardData, HealthData, RunStatus, RunSummary, LogEntry,
-  BackupConfig, RestoreResult, AlertData, WatcherStatus, SsdStorage,
-  DrillStatus, VerifyResult,
+  DashboardData,
+  HealthData,
+  RunStatus,
+  RunSummary,
+  LogEntry,
+  BackupConfig,
+  RestoreResult,
+  AlertData,
+  WatcherStatus,
+  SsdStorage,
+  DrillStatus,
+  VerifyResult,
 } from "./types";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8765";
@@ -62,12 +71,17 @@ export class ApiError extends Error {
   code: string | null;
   fix: string | null;
 
-  constructor(status: number, message: string, code: string | null = null, fix: string | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    code: string | null = null,
+    fix: string | null = null
+  ) {
     super(message);
-    this.name   = "ApiError";
+    this.name = "ApiError";
     this.status = status;
-    this.code   = code;
-    this.fix    = fix;
+    this.code = code;
+    this.fix = fix;
   }
 }
 
@@ -78,7 +92,7 @@ export async function request(
   method: HttpMethod,
   path: string,
   body?: unknown,
-  params?: Record<string, unknown>,
+  params?: Record<string, unknown>
 ): Promise<unknown> {
   const [token, baseUrl] = await Promise.all([_getToken(), _getBaseUrl()]);
 
@@ -108,8 +122,8 @@ export async function request(
     try {
       const j = await res.json();
       detail = j.detail?.message || j.detail || j.message || detail;
-      code   = j.detail?.code   ?? null;
-      fix    = j.detail?.fix    ?? null;
+      code = j.detail?.code ?? null;
+      fix = j.detail?.fix ?? null;
     } catch {
       // Response body was not JSON — use statusText as-is
     }
@@ -124,23 +138,24 @@ export async function request(
 
 export const api = {
   // Low-level HTTP verbs
-  get:    (path: string, params?: Record<string, unknown>) => request("GET",    path, null, params),
-  post:   (path: string, body?: unknown)                   => request("POST",   path, body),
-  patch:  (path: string, body?: unknown)                   => request("PATCH",  path, body),
-  delete: (path: string)                                   => request("DELETE", path),
+  get: (path: string, params?: Record<string, unknown>) => request("GET", path, null, params),
+  post: (path: string, body?: unknown) => request("POST", path, body),
+  patch: (path: string, body?: unknown) => request("PATCH", path, body),
+  delete: (path: string) => request("DELETE", path),
 
   // ── Named API methods ──────────────────────────────────────────────────────
-  health:          () => request("GET", "/health") as Promise<HealthData>,
-  dashboard:       () => request("GET", "/dashboard") as Promise<DashboardData>,
+  health: () => request("GET", "/health") as Promise<HealthData>,
+  dashboard: () => request("GET", "/dashboard") as Promise<DashboardData>,
 
   // Run control
-  runStatus:       () => request("GET",  "/run/status") as Promise<RunStatus>,
-  startRun:        (body: { full?: boolean }) => request("POST", "/run/start", body),
-  stopRun:         () => request("POST", "/run/stop"),
+  runStatus: () => request("GET", "/run/status") as Promise<RunStatus>,
+  startRun: (body: { full?: boolean }) => request("POST", "/run/start", body),
+  stopRun: () => request("POST", "/run/stop"),
 
   // Run history
-  getRuns:         (limit?: number) => request("GET", "/runs", null, limit ? { limit } : undefined) as Promise<RunSummary[]>,
-  exportRunsCsv:   async (): Promise<void> => {
+  getRuns: (limit?: number) =>
+    request("GET", "/runs", null, limit ? { limit } : undefined) as Promise<RunSummary[]>,
+  exportRunsCsv: async (): Promise<void> => {
     const [token, baseUrl] = await Promise.all([_getToken(), _getBaseUrl()]);
     const res = await fetch(baseUrl + "/runs/export?limit=10000", {
       headers: { "X-API-Key": token },
@@ -150,48 +165,60 @@ export const api = {
     const blob = new Blob([text], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "ghostbackup_runs.csv"; a.click();
+    a.href = url;
+    a.download = "ghostbackup_runs.csv";
+    a.click();
     URL.revokeObjectURL(url);
   },
-  getRun:          (id: number) => request("GET", `/runs/${id}`) as Promise<RunSummary>,
-  getRunLogs:      (id: number, level?: string) => request("GET", `/runs/${id}/logs`, null, level ? { level } : undefined) as Promise<LogEntry[]>,
+  getRun: (id: number) => request("GET", `/runs/${id}`) as Promise<RunSummary>,
+  getRunLogs: (id: number, level?: string) =>
+    request("GET", `/runs/${id}/logs`, null, level ? { level } : undefined) as Promise<LogEntry[]>,
 
   // Restore
-  restore:         (body: { run_id: number; library: string; destination: string; dry_run: boolean }) => request("POST", "/restore", body) as Promise<RestoreResult>,
+  restore: (body: { run_id: number; library: string; destination: string; dry_run: boolean }) =>
+    request("POST", "/restore", body) as Promise<RestoreResult>,
 
   // Config
-  getConfig:       () => request("GET",   "/config") as Promise<BackupConfig>,
-  verifyBackups:   () => request("POST",  "/verify") as Promise<VerifyResult>,
-  resetConfig:     () => request("POST",  "/config/reset"),
-  updateConfig:    (body: unknown) => request("PATCH", "/config", body),
-  addSite:         (body: { label: string; path: string; enabled: boolean }) => request("POST",  "/config/sites", body) as Promise<{ config: BackupConfig }>,
-  updateSite:      (name: string, body: { enabled: boolean }) => request("PATCH", `/config/sites/${encodeURIComponent(name)}`, body) as Promise<{ source: import("./types").SourceFolder }>,
-  removeSite:      (name: string) => request("DELETE", `/config/sites/${encodeURIComponent(name)}`) as Promise<{ config: BackupConfig }>,
+  getConfig: () => request("GET", "/config") as Promise<BackupConfig>,
+  verifyBackups: () => request("POST", "/verify") as Promise<VerifyResult>,
+  resetConfig: () => request("POST", "/config/reset"),
+  updateConfig: (body: unknown) => request("PATCH", "/config", body),
+  addSite: (body: { label: string; path: string; enabled: boolean }) =>
+    request("POST", "/config/sites", body) as Promise<{ config: BackupConfig }>,
+  updateSite: (name: string, body: { enabled: boolean }) =>
+    request("PATCH", `/config/sites/${encodeURIComponent(name)}`, body) as Promise<{
+      source: import("./types").SourceFolder;
+    }>,
+  removeSite: (name: string) =>
+    request("DELETE", `/config/sites/${encodeURIComponent(name)}`) as Promise<{
+      config: BackupConfig;
+    }>,
 
   // Settings
-  updateSmtp:      (body: unknown) => request("PATCH", "/settings/smtp", body),
-  testSmtp:        () => request("POST",  "/settings/smtp/test"),
+  updateSmtp: (body: unknown) => request("PATCH", "/settings/smtp", body),
+  testSmtp: () => request("POST", "/settings/smtp/test"),
   updateRetention: (body: unknown) => request("PATCH", "/settings/retention", body),
-  runPrune:        () => request("POST",  "/settings/prune"),
+  runPrune: () => request("POST", "/settings/prune"),
 
   // SSD
-  ssdStatus:       () => request("GET", "/ssd/status") as Promise<SsdStorage>,
+  ssdStatus: () => request("GET", "/ssd/status") as Promise<SsdStorage>,
 
   // Alerts
-  getAlerts:       () => request("GET",  "/alerts") as Promise<AlertData>,
-  dismissAlert:    (id: number) => request("POST", `/alerts/${id}/dismiss`),
-  dismissAllAlerts:() => request("POST", "/alerts/dismiss-all"),
+  getAlerts: () => request("GET", "/alerts") as Promise<AlertData>,
+  dismissAlert: (id: number) => request("POST", `/alerts/${id}/dismiss`),
+  dismissAllAlerts: () => request("POST", "/alerts/dismiss-all"),
 
   // Watcher
-  watcherStatus:   () => request("GET",  "/watcher/status") as Promise<WatcherStatus>,
-  watcherStart:    () => request("POST", "/watcher/start") as Promise<WatcherStatus>,
-  watcherStop:     () => request("POST", "/watcher/stop") as Promise<WatcherStatus>,
+  watcherStatus: () => request("GET", "/watcher/status") as Promise<WatcherStatus>,
+  watcherStart: () => request("POST", "/watcher/start") as Promise<WatcherStatus>,
+  watcherStop: () => request("POST", "/watcher/stop") as Promise<WatcherStatus>,
 
   // Restore drills
   drillStatus: () => request("GET", "/settings/drill-status") as Promise<DrillStatus>,
 
   // Encryption
-  generateEncryptionKey: () => request("POST", "/settings/encryption/generate-key") as Promise<{ key: string }>,
+  generateEncryptionKey: () =>
+    request("POST", "/settings/encryption/generate-key") as Promise<{ key: string }>,
 };
 
 export default api;

@@ -12,9 +12,9 @@ interface ErrBannerProps {
 export default function ErrBanner({ error, onDismiss }: ErrBannerProps) {
   if (!error) return null;
 
-  const message = typeof error === "string" ? error : (error?.message || String(error));
-  const code    = typeof error === "string" ? null : (error?.code ?? null);
-  const fix     = typeof error === "string" ? null : (error?.fix ?? null);
+  const message = typeof error === "string" ? error : error?.message || String(error);
+  const code = typeof error === "string" ? null : (error?.code ?? null);
+  const fix = typeof error === "string" ? null : (error?.fix ?? null);
 
   if (!message) return null;
 
@@ -25,9 +25,17 @@ export default function ErrBanner({ error, onDismiss }: ErrBannerProps) {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {code && (
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
-                background: "rgba(248,113,113,0.15)", padding: "1px 6px",
-                borderRadius: 4, flexShrink: 0 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: "rgba(248,113,113,0.15)",
+                  padding: "1px 6px",
+                  borderRadius: 4,
+                  flexShrink: 0,
+                }}
+              >
                 {code}
               </span>
             )}
@@ -41,7 +49,9 @@ export default function ErrBanner({ error, onDismiss }: ErrBannerProps) {
         </div>
       </div>
       {onDismiss && (
-        <button onClick={onDismiss} className="btn btn-ghost btn-sm" style={{ padding: "2px 8px" }}>×</button>
+        <button onClick={onDismiss} className="btn btn-ghost btn-sm" style={{ padding: "2px 8px" }}>
+          ×
+        </button>
       )}
     </div>
   );

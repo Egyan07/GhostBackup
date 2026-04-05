@@ -5,25 +5,36 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 // Hoisted API mock
 // ---------------------------------------------------------------------------
 const apiMocks = vi.hoisted(() => ({
-  getRuns:  vi.fn(),
-  getRun:   vi.fn(),
-  restore:  vi.fn(),
+  getRuns: vi.fn(),
+  getRun: vi.fn(),
+  restore: vi.fn(),
 }));
 
 vi.mock("../api-client", () => ({
   default: {
-    getRuns:  apiMocks.getRuns,
-    getRun:   apiMocks.getRun,
-    restore:  apiMocks.restore,
+    getRuns: apiMocks.getRuns,
+    getRun: apiMocks.getRun,
+    restore: apiMocks.restore,
   },
 }));
 
 // ---------------------------------------------------------------------------
 // Stub child components
 // ---------------------------------------------------------------------------
-vi.mock("../components/StatusPill",  () => ({ default: ({ status }) => <span data-testid="status-pill">{status}</span> }));
-vi.mock("../components/ErrBanner",   () => ({ default: ({ error, onDismiss }) => error ? <div data-testid="err-banner" onClick={onDismiss}>{typeof error === "string" ? error : error?.message ?? String(error)}</div> : null }));
-vi.mock("../components/LoadingState",() => ({ default: () => <div data-testid="loading-state" /> }));
+vi.mock("../components/StatusPill", () => ({
+  default: ({ status }) => <span data-testid="status-pill">{status}</span>,
+}));
+vi.mock("../components/ErrBanner", () => ({
+  default: ({ error, onDismiss }) =>
+    error ? (
+      <div data-testid="err-banner" onClick={onDismiss}>
+        {typeof error === "string" ? error : (error?.message ?? String(error))}
+      </div>
+    ) : null,
+}));
+vi.mock("../components/LoadingState", () => ({
+  default: () => <div data-testid="loading-state" />,
+}));
 
 import RestoreUI from "../pages/RestoreUI";
 
@@ -38,7 +49,7 @@ const RUN_1 = {
   bytes_human: "1.2 GB",
   folder_summary: {
     Documents: { files_transferred: 300, files_failed: 0, size_gb: 0.8 },
-    Photos:    { files_transferred: 200, files_failed: 2, size_gb: 0.4 },
+    Photos: { files_transferred: 200, files_failed: 2, size_gb: 0.4 },
   },
 };
 
@@ -66,7 +77,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.getRuns.mockResolvedValue([RUN_1, RUN_2]);
   apiMocks.getRun.mockResolvedValue(RUN_1);
-  apiMocks.restore.mockResolvedValue({ files_to_restore: 10, files: [], dry_run: true, destination: "/tmp" });
+  apiMocks.restore.mockResolvedValue({
+    files_to_restore: 10,
+    files: [],
+    dry_run: true,
+    destination: "/tmp",
+  });
 });
 // ---------------------------------------------------------------------------
 // Loading & error states
@@ -74,10 +90,16 @@ beforeEach(() => {
 describe("RestoreUI — loading state", () => {
   it("shows LoadingState while runs are fetching", async () => {
     let resolve;
-    apiMocks.getRuns.mockReturnValue(new Promise(r => { resolve = r; }));
+    apiMocks.getRuns.mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      })
+    );
     render(<RestoreUI />);
     expect(screen.getByTestId("loading-state")).toBeTruthy();
-    await waitFor(() => { resolve([RUN_1]); });
+    await waitFor(() => {
+      resolve([RUN_1]);
+    });
   });
 
   it("hides LoadingState after runs arrive", async () => {
@@ -136,7 +158,7 @@ describe("RestoreUI — run list", () => {
     render(<RestoreUI />);
     await waitFor(() => {
       const pills = screen.getAllByTestId("status-pill");
-      expect(pills.some(p => p.textContent === "success")).toBe(true);
+      expect(pills.some((p) => p.textContent === "success")).toBe(true);
     });
   });
 });
@@ -291,19 +313,34 @@ describe("RestoreUI — restore result", () => {
   };
 
   it("shows files_to_restore count after dry-run", async () => {
-    apiMocks.restore.mockResolvedValue({ files_to_restore: 10, files: [], dry_run: true, destination: "/tmp" });
+    apiMocks.restore.mockResolvedValue({
+      files_to_restore: 10,
+      files: [],
+      dry_run: true,
+      destination: "/tmp",
+    });
     await selectAndRestore();
     await waitFor(() => expect(screen.getByText(/10 files would be restored/)).toBeTruthy());
   });
 
   it("shows dry-run complete message", async () => {
-    apiMocks.restore.mockResolvedValue({ files_to_restore: 5, files: [], dry_run: true, destination: "/tmp" });
+    apiMocks.restore.mockResolvedValue({
+      files_to_restore: 5,
+      files: [],
+      dry_run: true,
+      destination: "/tmp",
+    });
     await selectAndRestore();
     await waitFor(() => expect(screen.getByText(/Dry-run complete/)).toBeTruthy());
   });
 
   it("shows restore result heading when not dry-run", async () => {
-    apiMocks.restore.mockResolvedValue({ files_count: 5, files: [], dry_run: false, destination: "/tmp" });
+    apiMocks.restore.mockResolvedValue({
+      files_count: 5,
+      files: [],
+      dry_run: false,
+      destination: "/tmp",
+    });
     render(<RestoreUI />);
     await waitFor(() => screen.getByText("(enabled)"));
     fireEvent.click(document.querySelector('input[type="checkbox"]'));
@@ -328,7 +365,9 @@ describe("RestoreUI — restore result", () => {
   it("shows api error in ErrBanner when restore throws", async () => {
     apiMocks.restore.mockRejectedValue(new Error("restore failed"));
     await selectAndRestore();
-    await waitFor(() => expect(screen.getByTestId("err-banner").textContent).toBe("restore failed"));
+    await waitFor(() =>
+      expect(screen.getByTestId("err-banner").textContent).toBe("restore failed")
+    );
   });
 });
 
@@ -340,7 +379,3 @@ describe("RestoreUI — warning banner", () => {
     );
   });
 });
-
-
-
-

@@ -11,22 +11,43 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api-client", () => ({
   default: {
-    dashboard:             apiMocks.dashboard,
-    ssdStatus:             vi.fn().mockResolvedValue({ status: "ok" }),
-    watcherStatus:         vi.fn().mockResolvedValue({ running: false }),
-    getConfig:             vi.fn().mockResolvedValue({}),
+    dashboard: apiMocks.dashboard,
+    ssdStatus: vi.fn().mockResolvedValue({ status: "ok" }),
+    watcherStatus: vi.fn().mockResolvedValue({ running: false }),
+    getConfig: vi.fn().mockResolvedValue({}),
   },
 }));
 
 // ---------------------------------------------------------------------------
 // Stub heavy child components so we only test Dashboard logic
 // ---------------------------------------------------------------------------
-vi.mock("../components/StatusPill",  () => ({ default: ({ status }) => <span data-testid="status-pill">{status}</span> }));
-vi.mock("../components/SsdGauge",    () => ({ default: ({ used, total }) => <div data-testid="ssd-gauge">{used}/{total}</div> }));
-vi.mock("../components/Heatmap",     () => ({ default: () => <div data-testid="heatmap" /> }));
-vi.mock("../components/Countdown",   () => ({ default: ({ nextRun, scheduleLabel }) => <div data-testid="countdown">{scheduleLabel || nextRun}</div> }));
-vi.mock("../components/ErrBanner",   () => ({ default: ({ error, onDismiss }) => error ? <div data-testid="err-banner" onClick={onDismiss}>{typeof error === "string" ? error : error?.message ?? String(error)}</div> : null }));
-vi.mock("../components/LoadingState",() => ({ default: () => <div data-testid="loading-state" /> }));
+vi.mock("../components/StatusPill", () => ({
+  default: ({ status }) => <span data-testid="status-pill">{status}</span>,
+}));
+vi.mock("../components/SsdGauge", () => ({
+  default: ({ used, total }) => (
+    <div data-testid="ssd-gauge">
+      {used}/{total}
+    </div>
+  ),
+}));
+vi.mock("../components/Heatmap", () => ({ default: () => <div data-testid="heatmap" /> }));
+vi.mock("../components/Countdown", () => ({
+  default: ({ nextRun, scheduleLabel }) => (
+    <div data-testid="countdown">{scheduleLabel || nextRun}</div>
+  ),
+}));
+vi.mock("../components/ErrBanner", () => ({
+  default: ({ error, onDismiss }) =>
+    error ? (
+      <div data-testid="err-banner" onClick={onDismiss}>
+        {typeof error === "string" ? error : (error?.message ?? String(error))}
+      </div>
+    ) : null,
+}));
+vi.mock("../components/LoadingState", () => ({
+  default: () => <div data-testid="loading-state" />,
+}));
 
 import Dashboard from "../pages/Dashboard";
 
@@ -36,25 +57,25 @@ import Dashboard from "../pages/Dashboard";
 const BASE_DATA = {
   runs: [
     { date: "2025-01-01", status: "success" },
-    { date: "2025-01-02", status: "failed"  },
+    { date: "2025-01-02", status: "failed" },
   ],
   last_run: {
-    started_at:        "2025-01-02T03:00:00",
-    status:            "success",
+    started_at: "2025-01-02T03:00:00",
+    status: "success",
     files_transferred: 1200,
-    duration_seconds:  90,
-    duration_human:    "1m 30s",
-    bytes_human:       "2.5 GB",
-    total_size_gb:     2.5,
+    duration_seconds: 90,
+    duration_human: "1m 30s",
+    bytes_human: "2.5 GB",
+    total_size_gb: 2.5,
     folder_summary: {
       Documents: { status: "success", files_transferred: 800, files_failed: 0 },
-      Photos:    { status: "partial", files_transferred: 400, files_failed: 3 },
+      Photos: { status: "partial", files_transferred: 400, files_failed: 3 },
     },
   },
-  active_run:  null,
-  ssd_storage: { status: "ok",  used_gb: 40, total_gb: 100, available_gb: 60, path: "/mnt/ssd" },
-  schedule:    { label: "Daily", time: "03:00", timezone: "Europe/London" },
-  next_run:    "2025-01-03T03:00:00",
+  active_run: null,
+  ssd_storage: { status: "ok", used_gb: 40, total_gb: 100, available_gb: 60, path: "/mnt/ssd" },
+  schedule: { label: "Daily", time: "03:00", timezone: "Europe/London" },
+  next_run: "2025-01-03T03:00:00",
 };
 
 beforeEach(() => {
@@ -67,7 +88,11 @@ beforeEach(() => {
 describe("Dashboard — loading state", () => {
   it("shows LoadingState while fetch is pending", async () => {
     let resolve;
-    apiMocks.dashboard.mockReturnValue(new Promise(r => { resolve = r; }));
+    apiMocks.dashboard.mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      })
+    );
     render(<Dashboard />);
     expect(screen.getByTestId("loading-state")).toBeTruthy();
     await act(async () => resolve(BASE_DATA));
@@ -88,8 +113,7 @@ describe("Dashboard — error state", () => {
   });
 
   it("clears error when ErrBanner is dismissed", async () => {
-    apiMocks.dashboard.mockRejectedValueOnce(new Error("fail"))
-                      .mockResolvedValue(BASE_DATA);
+    apiMocks.dashboard.mockRejectedValueOnce(new Error("fail")).mockResolvedValue(BASE_DATA);
     render(<Dashboard />);
     await waitFor(() => expect(screen.getByTestId("err-banner")).toBeTruthy());
     await userEvent.click(screen.getByTestId("err-banner"));
@@ -193,7 +217,7 @@ describe("Dashboard — run history", () => {
     render(<Dashboard />);
     await waitFor(() => {
       const pills = screen.getAllByTestId("status-pill");
-      expect(pills.some(p => p.textContent === "success")).toBe(true);
+      expect(pills.some((p) => p.textContent === "success")).toBe(true);
     });
   });
 });
@@ -284,7 +308,7 @@ describe("Dashboard — folder status table", () => {
     render(<Dashboard />);
     await waitFor(() => {
       const pills = screen.getAllByTestId("status-pill");
-      const texts = pills.map(p => p.textContent);
+      const texts = pills.map((p) => p.textContent);
       expect(texts).toContain("success");
       expect(texts).toContain("partial");
     });
@@ -313,29 +337,45 @@ describe("Dashboard — folder status table", () => {
 // Auto-refresh (setInterval)
 // ---------------------------------------------------------------------------
 describe("Dashboard — auto-refresh", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("calls dashboard API once on mount", async () => {
     render(<Dashboard />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMocks.dashboard).toHaveBeenCalledTimes(1);
   });
 
   it("calls dashboard API again after 15 seconds", async () => {
     render(<Dashboard />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMocks.dashboard).toHaveBeenCalledTimes(1);
-    await act(async () => { vi.advanceTimersByTime(15000); await Promise.resolve(); });
+    await act(async () => {
+      vi.advanceTimersByTime(15000);
+      await Promise.resolve();
+    });
     expect(apiMocks.dashboard).toHaveBeenCalledTimes(2);
   });
 
   it("clears interval on unmount", async () => {
     const { unmount } = render(<Dashboard />);
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMocks.dashboard).toHaveBeenCalledTimes(1);
     unmount();
-    await act(async () => { vi.advanceTimersByTime(15000); await Promise.resolve(); });
+    await act(async () => {
+      vi.advanceTimersByTime(15000);
+      await Promise.resolve();
+    });
     expect(apiMocks.dashboard).toHaveBeenCalledTimes(1);
   });
 });

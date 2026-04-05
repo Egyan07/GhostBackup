@@ -22,10 +22,7 @@ function WorkingChild() {
   return <div>Child rendered OK</div>;
 }
 
-function ConditionalChild({ shouldThrow }) {
-  if (shouldThrow) throw new Error("conditional crash");
-  return <div>Recovered successfully</div>;
-}
+// ConditionalChild available for recovery tests if needed
 
 // Suppress console.error from React error boundary internals
 beforeEach(() => {
@@ -145,8 +142,8 @@ describe("ErrorBoundary — componentDidCatch logging", () => {
     );
     expect(console.error).toHaveBeenCalled();
     const calls = console.error.mock.calls;
-    const boundaryCall = calls.find(c =>
-      typeof c[0] === "string" && c[0].includes("[ErrorBoundary]")
+    const boundaryCall = calls.find(
+      (c) => typeof c[0] === "string" && c[0].includes("[ErrorBoundary]")
     );
     expect(boundaryCall).toBeTruthy();
   });
@@ -265,8 +262,8 @@ describe("PageErrorBoundary — componentDidCatch logging", () => {
     );
     expect(console.error).toHaveBeenCalled();
     const calls = console.error.mock.calls;
-    const boundaryCall = calls.find(c =>
-      typeof c[0] === "string" && c[0].includes("[PageErrorBoundary:Restore]")
+    const boundaryCall = calls.find(
+      (c) => typeof c[0] === "string" && c[0].includes("[PageErrorBoundary:Restore]")
     );
     expect(boundaryCall).toBeTruthy();
   });
@@ -277,7 +274,9 @@ describe("PageErrorBoundary — componentDidCatch logging", () => {
 // ============================================================================
 describe("ErrorBoundary — edge cases", () => {
   it("handles error with empty message", () => {
-    function EmptyError() { throw new Error(""); }
+    function EmptyError() {
+      throw new Error("");
+    }
     render(
       <ErrorBoundary>
         <EmptyError />

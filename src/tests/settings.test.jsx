@@ -2,33 +2,39 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 const apiMocks = vi.hoisted(() => ({
-  getConfig:           vi.fn(),
-  updateSmtp:          vi.fn(),
-  sendTestEmail:       vi.fn(),
-  runVerify:           vi.fn(),
-  runPrune:            vi.fn(),
-  resetConfig:         vi.fn(),
+  getConfig: vi.fn(),
+  updateSmtp: vi.fn(),
+  sendTestEmail: vi.fn(),
+  runVerify: vi.fn(),
+  runPrune: vi.fn(),
+  resetConfig: vi.fn(),
   generateEncryptionKey: vi.fn(),
 }));
 
 vi.mock("../api-client", () => ({
   default: {
-    getConfig:             apiMocks.getConfig,
-    updateSmtp:            apiMocks.updateSmtp,
-    sendTestEmail:         apiMocks.sendTestEmail,
-    testSmtp:              vi.fn().mockResolvedValue({}),
-    runVerify:             apiMocks.runVerify,
-    runPrune:              apiMocks.runPrune,
-    resetConfig:           apiMocks.resetConfig,
+    getConfig: apiMocks.getConfig,
+    updateSmtp: apiMocks.updateSmtp,
+    sendTestEmail: apiMocks.sendTestEmail,
+    testSmtp: vi.fn().mockResolvedValue({}),
+    runVerify: apiMocks.runVerify,
+    runPrune: apiMocks.runPrune,
+    resetConfig: apiMocks.resetConfig,
     generateEncryptionKey: apiMocks.generateEncryptionKey,
-    ssdStatus:             vi.fn().mockResolvedValue({ status: "ok" }),
-    watcherStatus:         vi.fn().mockResolvedValue({ running: false }),
-    watcherStart:          vi.fn().mockResolvedValue({ running: true }),
-    watcherStop:           vi.fn().mockResolvedValue({ running: false }),
-    updateRetention:       vi.fn().mockResolvedValue({}),
-    verifyBackups:         vi.fn().mockResolvedValue({ verified: 0, failed: 0 }),
-    drillStatus:           vi.fn().mockResolvedValue({ last_completed: null, days_since_last: null, next_due: null, overdue: false, history: [] }),
-    health:                vi.fn().mockResolvedValue({ status: "ok", key_storage: "keyring" }),
+    ssdStatus: vi.fn().mockResolvedValue({ status: "ok" }),
+    watcherStatus: vi.fn().mockResolvedValue({ running: false }),
+    watcherStart: vi.fn().mockResolvedValue({ running: true }),
+    watcherStop: vi.fn().mockResolvedValue({ running: false }),
+    updateRetention: vi.fn().mockResolvedValue({}),
+    verifyBackups: vi.fn().mockResolvedValue({ verified: 0, failed: 0 }),
+    drillStatus: vi.fn().mockResolvedValue({
+      last_completed: null,
+      days_since_last: null,
+      next_due: null,
+      overdue: false,
+      history: [],
+    }),
+    health: vi.fn().mockResolvedValue({ status: "ok", key_storage: "keyring" }),
   },
 }));
 
@@ -36,8 +42,13 @@ import Settings from "../pages/Settings";
 
 const BASE_CFG = {
   encryption_active: true,
-  hkdf_salt_active:  true,
-  smtp: { host: "smtp.office365.com", port: 587, user: "backup@example.com", recipients: ["it@example.com"] },
+  hkdf_salt_active: true,
+  smtp: {
+    host: "smtp.office365.com",
+    port: 587,
+    user: "backup@example.com",
+    recipients: ["it@example.com"],
+  },
   retention: { daily_days: 365, weekly_days: 2555, compliance_years: 7, guard_days: 7 },
 };
 
@@ -55,17 +66,13 @@ describe("Settings — encryption panel", () => {
   it("shows warning when encryption is inactive", async () => {
     apiMocks.getConfig.mockResolvedValue({ ...BASE_CFG, encryption_active: false });
     render(<Settings />);
-    await waitFor(() =>
-      expect(screen.getByText(/GHOSTBACKUP_ENCRYPTION_KEY/)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/GHOSTBACKUP_ENCRYPTION_KEY/)).toBeTruthy());
   });
 
   it("shows HKDF salt warning when salt is not set", async () => {
     apiMocks.getConfig.mockResolvedValue({ ...BASE_CFG, hkdf_salt_active: false });
     render(<Settings />);
-    await waitFor(() =>
-      expect(screen.getByText(/GHOSTBACKUP_HKDF_SALT/)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/GHOSTBACKUP_HKDF_SALT/)).toBeTruthy());
   });
 
   it("does not show HKDF warning when salt is active", async () => {

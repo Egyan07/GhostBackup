@@ -7,7 +7,11 @@ interface CountdownProps {
   timezone?: string;
 }
 
-function buildScheduleLabel(scheduleLabel?: string, scheduleTime?: string, timezone?: string): string {
+function buildScheduleLabel(
+  scheduleLabel?: string,
+  scheduleTime?: string,
+  timezone?: string
+): string {
   if (scheduleLabel) return scheduleLabel;
   if (scheduleTime && timezone) return `Daily at ${scheduleTime} ${timezone}`;
   if (scheduleTime) return `Daily at ${scheduleTime}`;
@@ -15,7 +19,12 @@ function buildScheduleLabel(scheduleLabel?: string, scheduleTime?: string, timez
   return "Daily schedule";
 }
 
-export default function Countdown({ nextRun, scheduleLabel, scheduleTime, timezone }: CountdownProps) {
+export default function Countdown({
+  nextRun,
+  scheduleLabel,
+  scheduleTime,
+  timezone,
+}: CountdownProps) {
   const [time, setTime] = useState("--:--:--");
 
   useEffect(() => {
@@ -27,7 +36,10 @@ export default function Countdown({ nextRun, scheduleLabel, scheduleTime, timezo
     const tick = () => {
       const target = new Date(nextRun);
       const diff = target.getTime() - new Date().getTime();
-      if (diff <= 0) { setTime("00:00:00"); return; }
+      if (diff <= 0) {
+        setTime("00:00:00");
+        return;
+      }
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
@@ -43,7 +55,9 @@ export default function Countdown({ nextRun, scheduleLabel, scheduleTime, timezo
   return (
     <div>
       <div className="countdown">{time}</div>
-      <div className="countdown-label">Until next backup · {buildScheduleLabel(scheduleLabel, scheduleTime, timezone)}</div>
+      <div className="countdown-label">
+        Until next backup · {buildScheduleLabel(scheduleLabel, scheduleTime, timezone)}
+      </div>
     </div>
   );
 }

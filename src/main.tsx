@@ -6,7 +6,7 @@
  * even if the IPC event arrives before the renderer has loaded.
  */
 
-import { createRoot }          from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { useState, useEffect } from "react";
 import App from "./GhostBackup";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -16,7 +16,7 @@ import "./styles.css";
 const BACKOFF_DELAYS = [200, 400, 800, 1500, 2500, 4000, 5000];
 
 function BackendProvider() {
-  const [state, setState]         = useState<"loading" | "ready" | "crashed">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "crashed">("loading");
   const [crashCode, setCrashCode] = useState<number | null>(null);
 
   // Add/remove splash-active class on body so splash.css styles
@@ -46,7 +46,7 @@ function BackendProvider() {
 
     // Poll with exponential backoff in case we missed the IPC ready event
     // (e.g. renderer loaded after backend was already running)
-    let attempt   = 0;
+    let attempt = 0;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
 
@@ -76,7 +76,12 @@ function BackendProvider() {
     };
   }, []);
 
-  if (state === "ready") return <ErrorBoundary><App /></ErrorBoundary>;
+  if (state === "ready")
+    return (
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    );
 
   return (
     <div className="splash">
@@ -91,7 +96,8 @@ function BackendProvider() {
       {state === "crashed" && (
         <div className="error">
           ✕ The backup service stopped unexpectedly (exit code: {crashCode}).
-          <br /><br />
+          <br />
+          <br />
           Check that Python 3.10+ is installed and run:
           <br />
           <code>pip install -r backend/requirements.txt</code>

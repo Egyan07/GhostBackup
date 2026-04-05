@@ -29,7 +29,10 @@ function loadEnvFile(envFile) {
     const idx = trimmed.indexOf("=");
     if (idx === -1) continue;
     const key = trimmed.slice(0, idx).trim();
-    const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, "");
+    const val = trimmed
+      .slice(idx + 1)
+      .trim()
+      .replace(/^["']|["']$/g, "");
     result[key] = val;
   }
   return result;
@@ -58,7 +61,7 @@ describe("loadEnvFile", () => {
   });
 
   it("strips quotes from values", () => {
-    fs.writeFileSync(envFile, 'API_KEY="secret123"\nPATH=\'hello\'\n');
+    fs.writeFileSync(envFile, "API_KEY=\"secret123\"\nPATH='hello'\n");
     const result = loadEnvFile(envFile);
     expect(result.API_KEY).toBe("secret123");
     expect(result.PATH).toBe("hello");
@@ -87,9 +90,9 @@ describe("loadEnvFile", () => {
 
 function waitForBackend(url, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
-    const start    = Date.now();
-    let   attempts = 0;
-    const delays   = [50, 100, 200];
+    const start = Date.now();
+    let attempts = 0;
+    const delays = [50, 100, 200];
 
     const poll = () => {
       attempts++;
@@ -102,7 +105,10 @@ function waitForBackend(url, timeoutMs = 5000) {
         res.resume();
       });
       req.on("error", () => scheduleRetry());
-      req.setTimeout(200, () => { req.destroy(); scheduleRetry(); });
+      req.setTimeout(200, () => {
+        req.destroy();
+        scheduleRetry();
+      });
     };
 
     const scheduleRetry = () => {
@@ -133,7 +139,7 @@ describe("waitForBackend", () => {
       res.writeHead(200);
       res.end("ok");
     });
-    await new Promise(r => server.listen(0, "127.0.0.1", r));
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
     const port = server.address().port;
 
     const result = await waitForBackend(`http://127.0.0.1:${port}/health`);
@@ -145,18 +151,18 @@ describe("waitForBackend", () => {
       res.writeHead(503);
       res.end("not ready");
     });
-    await new Promise(r => server.listen(0, "127.0.0.1", r));
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
     const port = server.address().port;
 
-    await expect(
-      waitForBackend(`http://127.0.0.1:${port}/health`, 500)
-    ).rejects.toThrow(/did not become ready/);
+    await expect(waitForBackend(`http://127.0.0.1:${port}/health`, 500)).rejects.toThrow(
+      /did not become ready/
+    );
   });
 
   it("rejects when no server is running", async () => {
-    await expect(
-      waitForBackend("http://127.0.0.1:19999/health", 500)
-    ).rejects.toThrow(/did not become ready/);
+    await expect(waitForBackend("http://127.0.0.1:19999/health", 500)).rejects.toThrow(
+      /did not become ready/
+    );
   });
 
   it("retries and succeeds when server becomes ready", async () => {
@@ -171,7 +177,7 @@ describe("waitForBackend", () => {
         res.end("not ready");
       }
     });
-    await new Promise(r => server.listen(0, "127.0.0.1", r));
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
     const port = server.address().port;
 
     const result = await waitForBackend(`http://127.0.0.1:${port}/health`, 5000);
@@ -269,7 +275,10 @@ describe("notification server", () => {
       let bodySize = 0;
       req.on("data", (chunk) => {
         bodySize += chunk.length;
-        if (bodySize > 10240) { req.destroy(); return; }
+        if (bodySize > 10240) {
+          req.destroy();
+          return;
+        }
         body += chunk;
       });
       req.on("end", () => {
@@ -283,7 +292,7 @@ describe("notification server", () => {
         res.end("ok");
       });
     });
-    await new Promise(r => notifyServer.listen(0, "127.0.0.1", r));
+    await new Promise((r) => notifyServer.listen(0, "127.0.0.1", r));
     notifyServer._notifications = notifications;
   });
 
@@ -365,7 +374,11 @@ describe("preload bridge API surface", () => {
     const Module = createRequire(import.meta.url);
     const moduleObj = { exports: {} };
     const wrappedFn = new Function(
-      "require", "module", "exports", "__filename", "__dirname",
+      "require",
+      "module",
+      "exports",
+      "__filename",
+      "__dirname",
       preloadSrc
     );
 
@@ -379,13 +392,7 @@ describe("preload bridge API surface", () => {
       return Module(id);
     };
 
-    wrappedFn(
-      fakeRequire,
-      moduleObj,
-      moduleObj.exports,
-      preloadPath,
-      path.dirname(preloadPath)
-    );
+    wrappedFn(fakeRequire, moduleObj, moduleObj.exports, preloadPath, path.dirname(preloadPath));
   });
 
   it('registers the API under "ghostbackup" namespace', () => {
@@ -425,17 +432,37 @@ describe("preload bridge API surface", () => {
 
   // Verify each invoke-based method calls the correct IPC channel with args
   const invokeMethodChannelMap = [
-    { method: "openDirectory",    channel: "dialog:open-directory",  args: [],                   expectedArgs: [] },
-    { method: "openFile",         channel: "dialog:open-file",       args: [[{ name: "YAML", extensions: ["yaml"] }]], expectedArgs: [[{ name: "YAML", extensions: ["yaml"] }]] },
-    { method: "openInExplorer",   channel: "shell:open-path",        args: ["/some/path"],        expectedArgs: ["/some/path"] },
-    { method: "saveCredential",   channel: "credentials:save",       args: ["MY_KEY", "MY_VAL"],  expectedArgs: [{ key: "MY_KEY", value: "MY_VAL" }] },
-    { method: "credentialStatus", channel: "credentials:status",     args: [],                    expectedArgs: [] },
-    { method: "apiUrl",           channel: "app:api-url",            args: [],                    expectedArgs: [] },
-    { method: "version",          channel: "app:version",            args: [],                    expectedArgs: [] },
-    { method: "author",           channel: "app:author",             args: [],                    expectedArgs: [] },
-    { method: "getApiToken",      channel: "app:api-token",          args: [],                    expectedArgs: [] },
-    { method: "backendStatus",    channel: "backend:status",         args: [],                    expectedArgs: [] },
-    { method: "notify",           channel: "notify",                 args: ["Title", "Body"],     expectedArgs: [{ title: "Title", body: "Body" }] },
+    { method: "openDirectory", channel: "dialog:open-directory", args: [], expectedArgs: [] },
+    {
+      method: "openFile",
+      channel: "dialog:open-file",
+      args: [[{ name: "YAML", extensions: ["yaml"] }]],
+      expectedArgs: [[{ name: "YAML", extensions: ["yaml"] }]],
+    },
+    {
+      method: "openInExplorer",
+      channel: "shell:open-path",
+      args: ["/some/path"],
+      expectedArgs: ["/some/path"],
+    },
+    {
+      method: "saveCredential",
+      channel: "credentials:save",
+      args: ["MY_KEY", "MY_VAL"],
+      expectedArgs: [{ key: "MY_KEY", value: "MY_VAL" }],
+    },
+    { method: "credentialStatus", channel: "credentials:status", args: [], expectedArgs: [] },
+    { method: "apiUrl", channel: "app:api-url", args: [], expectedArgs: [] },
+    { method: "version", channel: "app:version", args: [], expectedArgs: [] },
+    { method: "author", channel: "app:author", args: [], expectedArgs: [] },
+    { method: "getApiToken", channel: "app:api-token", args: [], expectedArgs: [] },
+    { method: "backendStatus", channel: "backend:status", args: [], expectedArgs: [] },
+    {
+      method: "notify",
+      channel: "notify",
+      args: ["Title", "Body"],
+      expectedArgs: [{ title: "Title", body: "Body" }],
+    },
   ];
 
   for (const { method, channel, args, expectedArgs } of invokeMethodChannelMap) {
@@ -452,9 +479,9 @@ describe("preload bridge API surface", () => {
 
   // Verify event-listener methods register on correct channels and return unsubscribe fns
   const listenerMethods = [
-    { method: "onBackendReady",   channel: "backend:ready" },
+    { method: "onBackendReady", channel: "backend:ready" },
     { method: "onBackendCrashed", channel: "backend:crashed" },
-    { method: "onAlertNew",       channel: "alert:new" },
+    { method: "onAlertNew", channel: "alert:new" },
   ];
 
   for (const { method, channel } of listenerMethods) {
@@ -570,18 +597,34 @@ describe("main.js IPC handler registration", () => {
     for (let i = fnBodyStart; i < mainSrc.length; i++) {
       if (mainSrc[i] === "{") depth++;
       if (mainSrc[i] === "}") depth--;
-      if (depth === 0) { fnEnd = i + 1; break; }
+      if (depth === 0) {
+        fnEnd = i + 1;
+        break;
+      }
     }
 
     const fnBody = mainSrc.slice(fnStart, fnEnd);
 
     // Build a context with all the variables the function references
     const context = new Function(
-      "ipcMain", "dialog", "shell", "app", "Notification",
-      "mainWindow", "backendReady", "pythonProcess",
-      "API_URL", "API_TOKEN", "ENV_FILE", "ROOT_DIR",
-      "fs", "path", "process",
-      "isRegisteredInStartup", "registerWindowsStartup", "unregisterWindowsStartup",
+      "ipcMain",
+      "dialog",
+      "shell",
+      "app",
+      "Notification",
+      "mainWindow",
+      "backendReady",
+      "pythonProcess",
+      "API_URL",
+      "API_TOKEN",
+      "ENV_FILE",
+      "ROOT_DIR",
+      "fs",
+      "path",
+      "process",
+      "isRegisteredInStartup",
+      "registerWindowsStartup",
+      "unregisterWindowsStartup",
       `
       ${fnBody}
       registerIpcHandlers();
@@ -597,9 +640,9 @@ describe("main.js IPC handler registration", () => {
       mockShell,
       mockApp,
       mockNotification,
-      null,            // mainWindow
-      false,           // backendReady
-      null,            // pythonProcess
+      null, // mainWindow
+      false, // backendReady
+      null, // pythonProcess
       "http://127.0.0.1:8765",
       "test-api-token",
       path.join(tmpDir, ".env.local"),
@@ -607,9 +650,9 @@ describe("main.js IPC handler registration", () => {
       fs,
       path,
       process,
-      vi.fn().mockReturnValue(false),  // isRegisteredInStartup
-      vi.fn(),                         // registerWindowsStartup
-      vi.fn(),                         // unregisterWindowsStartup
+      vi.fn().mockReturnValue(false), // isRegisteredInStartup
+      vi.fn(), // registerWindowsStartup
+      vi.fn() // unregisterWindowsStartup
     );
 
     // Store tmpDir for cleanup
@@ -694,7 +737,10 @@ describe("main.js IPC handler registration", () => {
   });
 
   it("credentials:save rejects unknown keys", async () => {
-    const result = await registeredHandlers["credentials:save"]({}, { key: "UNKNOWN", value: "abc" });
+    const result = await registeredHandlers["credentials:save"](
+      {},
+      { key: "UNKNOWN", value: "abc" }
+    );
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/[Uu]nknown/);
   });
@@ -705,10 +751,7 @@ describe("main.js IPC handler registration", () => {
       { key: "GHOSTBACKUP_ENCRYPTION_KEY", value: "testkey123" }
     );
     expect(result.success).toBe(true);
-    const envContent = fs.readFileSync(
-      path.join(registeredHandlers._tmpDir, ".env.local"),
-      "utf8"
-    );
+    const envContent = fs.readFileSync(path.join(registeredHandlers._tmpDir, ".env.local"), "utf8");
     expect(envContent).toContain('GHOSTBACKUP_ENCRYPTION_KEY="testkey123"');
   });
 
@@ -787,7 +830,10 @@ describe("CSP configuration", () => {
     for (let i = cbStart; i < mainSrc.length; i++) {
       if (mainSrc[i] === "(") depth++;
       if (mainSrc[i] === ")") depth--;
-      if (depth === 0) { cbEnd = i + 1; break; }
+      if (depth === 0) {
+        cbEnd = i + 1;
+        break;
+      }
     }
 
     // The content between the parens is the callback function
@@ -800,12 +846,11 @@ describe("CSP configuration", () => {
 
   it("sets Content-Security-Policy header in the response", () => {
     let capturedHeaders = null;
-    const mockCallback = (obj) => { capturedHeaders = obj; };
+    const mockCallback = (obj) => {
+      capturedHeaders = obj;
+    };
 
-    cspCallback(
-      { responseHeaders: { "X-Existing": ["keep"] } },
-      mockCallback
-    );
+    cspCallback({ responseHeaders: { "X-Existing": ["keep"] } }, mockCallback);
 
     expect(capturedHeaders).not.toBeNull();
     expect(capturedHeaders.responseHeaders).toHaveProperty("Content-Security-Policy");
@@ -813,19 +858,20 @@ describe("CSP configuration", () => {
 
   it("preserves existing response headers", () => {
     let capturedHeaders = null;
-    const mockCallback = (obj) => { capturedHeaders = obj; };
+    const mockCallback = (obj) => {
+      capturedHeaders = obj;
+    };
 
-    cspCallback(
-      { responseHeaders: { "X-Custom": ["myval"] } },
-      mockCallback
-    );
+    cspCallback({ responseHeaders: { "X-Custom": ["myval"] } }, mockCallback);
 
     expect(capturedHeaders.responseHeaders["X-Custom"]).toEqual(["myval"]);
   });
 
   it("restricts default-src to 'self'", () => {
     let capturedHeaders = null;
-    const mockCallback = (obj) => { capturedHeaders = obj; };
+    const mockCallback = (obj) => {
+      capturedHeaders = obj;
+    };
     cspCallback({ responseHeaders: {} }, mockCallback);
 
     const csp = capturedHeaders.responseHeaders["Content-Security-Policy"][0];
@@ -834,7 +880,9 @@ describe("CSP configuration", () => {
 
   it("restricts script-src to 'self'", () => {
     let capturedHeaders = null;
-    const mockCallback = (obj) => { capturedHeaders = obj; };
+    const mockCallback = (obj) => {
+      capturedHeaders = obj;
+    };
     cspCallback({ responseHeaders: {} }, mockCallback);
 
     const csp = capturedHeaders.responseHeaders["Content-Security-Policy"][0];
@@ -843,7 +891,9 @@ describe("CSP configuration", () => {
 
   it("allows connect-src for local backend", () => {
     let capturedHeaders = null;
-    const mockCallback = (obj) => { capturedHeaders = obj; };
+    const mockCallback = (obj) => {
+      capturedHeaders = obj;
+    };
     cspCallback({ responseHeaders: {} }, mockCallback);
 
     const csp = capturedHeaders.responseHeaders["Content-Security-Policy"][0];
@@ -852,7 +902,9 @@ describe("CSP configuration", () => {
 
   it("allows img-src self and data URIs", () => {
     let capturedHeaders = null;
-    const mockCallback = (obj) => { capturedHeaders = obj; };
+    const mockCallback = (obj) => {
+      capturedHeaders = obj;
+    };
     cspCallback({ responseHeaders: {} }, mockCallback);
 
     const csp = capturedHeaders.responseHeaders["Content-Security-Policy"][0];
@@ -861,7 +913,9 @@ describe("CSP configuration", () => {
 
   it("CSP is a single string value in an array", () => {
     let capturedHeaders = null;
-    const mockCallback = (obj) => { capturedHeaders = obj; };
+    const mockCallback = (obj) => {
+      capturedHeaders = obj;
+    };
     cspCallback({ responseHeaders: {} }, mockCallback);
 
     const cspArr = capturedHeaders.responseHeaders["Content-Security-Policy"];
@@ -888,15 +942,18 @@ describe("BrowserWindow security settings", () => {
   for (let i = braceStart; i < mainSrc.length; i++) {
     if (mainSrc[i] === "{") depth++;
     if (mainSrc[i] === "}") depth--;
-    if (depth === 0) { braceEnd = i + 1; break; }
+    if (depth === 0) {
+      braceEnd = i + 1;
+      break;
+    }
   }
   const wpSrc = mainSrc.slice(braceStart, braceEnd);
 
   // Parse the object using Function (it references __dirname and path, so provide them)
-  const webPrefs = new Function(
-    "__dirname", "path",
-    `return (${wpSrc})`
-  )(path.join(process.cwd(), "electron"), path);
+  const webPrefs = new Function("__dirname", "path", `return (${wpSrc})`)(
+    path.join(process.cwd(), "electron"),
+    path
+  );
 
   it("disables nodeIntegration", () => {
     expect(webPrefs.nodeIntegration).toBe(false);
@@ -936,9 +993,7 @@ describe("credential persistence to .env.local", () => {
   function saveCredential(envFilePath, key, value) {
     const safeValue = value.replace(/[\r\n"\\]/g, "");
     if (safeValue !== value) return { error: "Invalid characters" };
-    let envContent = fs.existsSync(envFilePath)
-      ? fs.readFileSync(envFilePath, "utf8")
-      : "";
+    let envContent = fs.existsSync(envFilePath) ? fs.readFileSync(envFilePath, "utf8") : "";
     const regex = new RegExp(`^${key}=.*$`, "m");
     if (regex.test(envContent)) {
       envContent = envContent.replace(regex, `${key}="${safeValue}"`);

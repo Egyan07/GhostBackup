@@ -10,19 +10,19 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("ghostbackup", {
   // ── File system dialogs ───────────────────────────────────────────────────
-  openDirectory:  ()        => ipcRenderer.invoke("dialog:open-directory"),
-  openFile:       (filters) => ipcRenderer.invoke("dialog:open-file", filters),
+  openDirectory: () => ipcRenderer.invoke("dialog:open-directory"),
+  openFile: (filters) => ipcRenderer.invoke("dialog:open-file", filters),
   openInExplorer: (filePath) => ipcRenderer.invoke("shell:open-path", filePath),
 
   // ── Credentials (values never cross the bridge) ───────────────────────────
-  saveCredential:   (key, value) => ipcRenderer.invoke("credentials:save", { key, value }),
-  credentialStatus: ()           => ipcRenderer.invoke("credentials:status"),
+  saveCredential: (key, value) => ipcRenderer.invoke("credentials:save", { key, value }),
+  credentialStatus: () => ipcRenderer.invoke("credentials:status"),
 
   // ── App info ──────────────────────────────────────────────────────────────
-  apiUrl:        () => ipcRenderer.invoke("app:api-url"),
-  version:       () => ipcRenderer.invoke("app:version"),
-  author:        () => ipcRenderer.invoke("app:author"),
-  getApiToken:   () => ipcRenderer.invoke("app:api-token"),
+  apiUrl: () => ipcRenderer.invoke("app:api-url"),
+  version: () => ipcRenderer.invoke("app:version"),
+  author: () => ipcRenderer.invoke("app:author"),
+  getApiToken: () => ipcRenderer.invoke("app:api-token"),
   backendStatus: () => ipcRenderer.invoke("backend:status"),
 
   // ── Notifications ─────────────────────────────────────────────────────────
@@ -46,5 +46,4 @@ contextBridge.exposeInMainWorld("ghostbackup", {
     ipcRenderer.on("alert:new", handler);
     return () => ipcRenderer.removeListener("alert:new", handler);
   },
-
 });
