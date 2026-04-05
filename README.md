@@ -6,7 +6,7 @@
 
 ![CI](https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI)
 ![Backend Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-599%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-630%2B%20passing-brightgreen)
 ![GitHub issues](https://img.shields.io/github/issues/Egyan07/GhostBackup)
 ![GitHub last commit](https://img.shields.io/github/last-commit/Egyan07/GhostBackup)
 ![License](https://img.shields.io/github/license/Egyan07/GhostBackup)
@@ -172,7 +172,7 @@ If you prefer to install manually or use your existing Python/Node environments:
 
 - Windows 10 or 11
 - [Python 3.10+](https://www.python.org/downloads/) — **must be added to PATH during installation**
-- [Node.js 18+](https://nodejs.org/)
+- [Node.js 22+](https://nodejs.org/)
 - At least one dedicated backup drive (SSD recommended)
 - ~200MB free disk space for dependencies
 - Internet connection required during install (for `pip install` and `npm install`)
@@ -216,21 +216,32 @@ If you prefer to install manually or use your existing Python/Node environments:
 ## 🧪 Testing
 
 ```bash
-# Backend — 368 tests, 90% line coverage
+# Backend — 377 tests, 90% line coverage
 cd backend
 python -m pytest tests/ -v --cov=. --cov-report=term-missing
 
-# Frontend — 142 tests
+# Frontend — 260+ tests
+npm run test:frontend
+
+# Electron — 62 behavioral tests
+npm run test:electron
+
+# All tests
 npm test
 
 # Frontend — with coverage
 npm run test:coverage
+
+# Lint + format check
+npm run lint
+npm run format:check
 ```
 
 | Suite | Tests | Coverage | Type | CI |
 |-------|-------|----------|------|----|
-| Backend | 368 | 90% line | Unit + integration | ✅ GitHub Actions |
-| Frontend | 142 | 63% stmt | Unit (Vitest + v8) | ✅ GitHub Actions |
+| Backend | 377 | 90% line | Unit + integration | ✅ GitHub Actions |
+| Frontend | 260+ | 75%+ stmt | Unit (Vitest + Testing Library) | ✅ GitHub Actions |
+| Electron | 62 | — | Behavioral (IPC, preload, CSP) | ✅ GitHub Actions |
 
 **What's tested:**
 - Backup engine (scan, encrypt, copy, verify, prune)
@@ -239,6 +250,10 @@ npm run test:coverage
 - Scheduler and file watcher lifecycle
 - Email alert formatting and delivery
 - Failure threshold behavior
+- All 6 React pages (Dashboard, BackupConfig, LiveRun, LogsViewer, RestoreUI, Settings)
+- All components (AlertBell, ErrorBoundary, ErrBanner, StatusPill, Countdown, LoadingState)
+- Electron IPC round-trips, preload bridge, CSP headers, BrowserWindow security
+- Credential validation, notification server, env file parsing
 
 **What's not tested:**
 - End-to-end Electron → backend → disk pipeline (manual testing only)

@@ -4,6 +4,34 @@ All notable changes to GhostBackup are documented here.
 
 ---
 
+## v3.3.0 — Test Coverage, Code Quality & CI Fixes
+
+### Testing
+- **4 new frontend test files**: AlertBell (30+ cases), ErrorBoundary (22 cases), LiveRun (28+ cases), LogsViewer (30+ cases) — all previously untested.
+- **Electron tests rewritten**: 33 string-matching tests replaced with 62 behavioral tests covering IPC round-trips, preload bridge verification, CSP header validation, and BrowserWindow security settings.
+- **Frontend coverage**: ~60% → 75%+ statement coverage. All 6 pages and all 8 components now have dedicated tests.
+- **630+ tests passing** — 377 backend + 260+ frontend + 62 electron.
+
+### Code Quality
+- **Prettier added**: `.prettierrc` with consistent formatting rules. `npm run format` and `npm run format:check` scripts.
+- **Husky pre-commit hooks**: format check + lint run automatically before every commit.
+- **ESLint fix script**: `npm run lint:fix` for auto-fixable issues.
+
+### Cleanup
+- **17 dead .jsx/.js files removed**: old JavaScript duplicates left behind after TypeScript migration. 2,141 lines of dead code deleted.
+
+### CI
+- **Node 20 → 22 across all workflows**: lint, security, and build jobs updated to match `engines` field (`>=22.0.0`).
+- **Coverage condition fixed**: was checking `matrix.node-version == '20'` (never true), now correctly checks `'22'`.
+- **Prettier format check in CI**: added to lint job before TypeScript and ESLint checks.
+- **npm cache removed from lint/security jobs**: was causing `npm install` exit code 127 failures.
+
+### Package Metadata
+- **`engines`**: `{ "node": ">=22.0.0" }` — enforces Node 22+ requirement.
+- **`repository`**, **`bugs`**, **`homepage`**, **`license`** fields added to `package.json`.
+
+---
+
 ## v3.2.0 — Security Hardening, TypeScript & CI Overhaul
 
 ### TypeScript Migration
@@ -42,7 +70,7 @@ All notable changes to GhostBackup are documented here.
 
 ### Testing
 - 89 new tests: Electron main process (73), assert-guard verification (4), path traversal (2), encryption fallback (2), error boundary (3), CSV sanitization (4), restore concurrency (1)
-- **599 tests passing** — 377 backend + 149 frontend + 73 electron
+- **599 tests passing** — 377 backend + 149 frontend + 73 electron (see v3.3.0 for updated counts)
 
 ---
 
