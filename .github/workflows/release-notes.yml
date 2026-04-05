@@ -1,0 +1,74 @@
+name: Release Notes Footer
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  add-footer:
+    name: Add Standardised Footer
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release .exe asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/assets
+          gh release download "${{ github.event.release.tag_name }}" \
+            --pattern "*.exe" \
+            --dir /tmp/assets
+
+      - name: Compute SHA256 checksum
+        id: checksum
+        run: |
+          EXE=$(ls /tmp/assets/*.exe | head -1)
+          SHA=$(sha256sum "$EXE" | awk '{print $1}')
+          FILENAME=$(basename "$EXE")
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
+
+      - name: Append footer to release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+          INSTALLER: ${{ steps.checksum.outputs.filename }}
+          SHA256: ${{ steps.checksum.outputs.sha256 }}
+        run: |
+          REPO="${{ github.repository }}"
+          EXISTING=$(gh release view "$TAG" --json body -q '.body')
+
+          read -r -d '' FOOTER << 'ENDOFBLOCK' || true
+
+          ---
+
+          ### Installation
+
+          1. Download **__INSTALLER__** from the assets below.
+          2. Run the installer and follow the on-screen prompts.
+          3. Launch GhostBackup from the Start Menu or desktop shortcut.
+
+          ### Verify integrity
+
+          ```
+          SHA256: __SHA256__
+          ```
+
+          ### Links
+
+          - [Full changelog](https://github.com/__REPO__/compare/...__TAG__)
+          - [All releases](https://github.com/__REPO__/releases)
+          ENDOFBLOCK
+
+          FOOTER="$(echo "$FOOTER" | sed 's/^          //')"
+          FOOTER="${FOOTER//__SHA256__/$SHA256}"
+          FOOTER="${FOOTER//__REPO__/$REPO}"
+          FOOTER="${FOOTER//__TAG__/$TAG}"
+          FOOTER="${FOOTER//__INSTALLER__/$INSTALLER}"
+
+          gh release edit "$TAG" --notes "${EXISTING}${FOOTER}"
