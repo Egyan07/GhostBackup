@@ -5,6 +5,9 @@
  * Since main.js has import-time side effects (app.requestSingleInstanceLock()),
  * we test by re-implementing key functions with the same logic and mocking
  * the Electron APIs they depend on.
+ *
+ * The preload bridge and IPC handler sections mock Electron's module system
+ * to verify actual registration behavior rather than string-matching source.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -12,6 +15,7 @@ import fs from "fs";
 import path from "path";
 import http from "http";
 import crypto from "crypto";
+import { createRequire } from "module";
 
 // ── loadEnvFile logic ────────────────────────────────────────────────────────
 
@@ -322,17 +326,74 @@ describe("notification server", () => {
   });
 });
 
-// ── Preload bridge structure ────────────────────────────────────────────────
+// ── Preload bridge behavioral tests ─────────────────────────────────────────
+//
+// Instead of reading preload.js as a text file and checking for substrings,
+// we mock electron's contextBridge and ipcRenderer, then evaluate preload.js
+// so the actual code runs and registers real methods via exposeInMainWorld.
+//
 
 describe("preload bridge API surface", () => {
-  // Verify that the preload script exposes the expected set of methods
-  // by reading the file and checking for the IPC channel mappings
+  let exposedApi;
+  let mockIpcRenderer;
 
-  const preloadSrc = fs.readFileSync(
-    path.join(process.cwd(), "electron", "preload.js"),
-    "utf8"
-  );
+  beforeEach(() => {
+    exposedApi = null;
 
+    // Track ipcRenderer.on registrations so we can verify event listeners
+    const onListeners = {};
+
+    mockIpcRenderer = {
+      invoke: vi.fn().mockResolvedValue("mock-result"),
+      on: vi.fn((channel, handler) => {
+        onListeners[channel] = handler;
+      }),
+      removeListener: vi.fn(),
+    };
+
+    const mockContextBridge = {
+      exposeInMainWorld: vi.fn((apiKey, api) => {
+        exposedApi = { key: apiKey, api };
+      }),
+    };
+
+    // Build a sandboxed require that intercepts "electron" imports
+    const preloadPath = path.join(process.cwd(), "electron", "preload.js");
+    const preloadSrc = fs.readFileSync(preloadPath, "utf8");
+
+    // Create a module-scoped sandbox with mocked electron
+    const Module = createRequire(import.meta.url);
+    const moduleObj = { exports: {} };
+    const wrappedFn = new Function(
+      "require", "module", "exports", "__filename", "__dirname",
+      preloadSrc
+    );
+
+    const fakeRequire = (id) => {
+      if (id === "electron") {
+        return {
+          contextBridge: mockContextBridge,
+          ipcRenderer: mockIpcRenderer,
+        };
+      }
+      return Module(id);
+    };
+
+    wrappedFn(
+      fakeRequire,
+      moduleObj,
+      moduleObj.exports,
+      preloadPath,
+      path.dirname(preloadPath)
+    );
+  });
+
+  it('registers the API under "ghostbackup" namespace', () => {
+    expect(exposedApi).not.toBeNull();
+    expect(exposedApi.key).toBe("ghostbackup");
+  });
+
+  // All methods that should be exposed on window.ghostbackup
   const expectedMethods = [
     "openDirectory",
     "openFile",
@@ -351,44 +412,217 @@ describe("preload bridge API surface", () => {
   ];
 
   for (const method of expectedMethods) {
-    it(`exposes ${method} method`, () => {
-      expect(preloadSrc).toContain(method);
+    it(`exposes ${method} as a function`, () => {
+      expect(exposedApi.api).toHaveProperty(method);
+      expect(typeof exposedApi.api[method]).toBe("function");
     });
   }
 
-  const expectedChannels = [
-    "dialog:open-directory",
-    "dialog:open-file",
-    "shell:open-path",
-    "credentials:save",
-    "credentials:status",
-    "app:api-url",
-    "app:version",
-    "app:author",
-    "app:api-token",
-    "backend:status",
-    "notify",
-    "backend:ready",
-    "backend:crashed",
-    "alert:new",
+  it("does not expose unexpected methods", () => {
+    const actualKeys = Object.keys(exposedApi.api).sort();
+    expect(actualKeys).toEqual([...expectedMethods].sort());
+  });
+
+  // Verify each invoke-based method calls the correct IPC channel with args
+  const invokeMethodChannelMap = [
+    { method: "openDirectory",    channel: "dialog:open-directory",  args: [],                   expectedArgs: [] },
+    { method: "openFile",         channel: "dialog:open-file",       args: [[{ name: "YAML", extensions: ["yaml"] }]], expectedArgs: [[{ name: "YAML", extensions: ["yaml"] }]] },
+    { method: "openInExplorer",   channel: "shell:open-path",        args: ["/some/path"],        expectedArgs: ["/some/path"] },
+    { method: "saveCredential",   channel: "credentials:save",       args: ["MY_KEY", "MY_VAL"],  expectedArgs: [{ key: "MY_KEY", value: "MY_VAL" }] },
+    { method: "credentialStatus", channel: "credentials:status",     args: [],                    expectedArgs: [] },
+    { method: "apiUrl",           channel: "app:api-url",            args: [],                    expectedArgs: [] },
+    { method: "version",          channel: "app:version",            args: [],                    expectedArgs: [] },
+    { method: "author",           channel: "app:author",             args: [],                    expectedArgs: [] },
+    { method: "getApiToken",      channel: "app:api-token",          args: [],                    expectedArgs: [] },
+    { method: "backendStatus",    channel: "backend:status",         args: [],                    expectedArgs: [] },
+    { method: "notify",           channel: "notify",                 args: ["Title", "Body"],     expectedArgs: [{ title: "Title", body: "Body" }] },
   ];
 
-  for (const channel of expectedChannels) {
-    it(`maps to IPC channel "${channel}"`, () => {
-      expect(preloadSrc).toContain(channel);
+  for (const { method, channel, args, expectedArgs } of invokeMethodChannelMap) {
+    it(`${method}() invokes IPC channel "${channel}" with correct arguments`, async () => {
+      mockIpcRenderer.invoke.mockClear();
+      await exposedApi.api[method](...args);
+      expect(mockIpcRenderer.invoke).toHaveBeenCalledTimes(1);
+      expect(mockIpcRenderer.invoke.mock.calls[0][0]).toBe(channel);
+      // Check remaining args (after channel name)
+      const passedArgs = mockIpcRenderer.invoke.mock.calls[0].slice(1);
+      expect(passedArgs).toEqual(expectedArgs);
+    });
+  }
+
+  // Verify event-listener methods register on correct channels and return unsubscribe fns
+  const listenerMethods = [
+    { method: "onBackendReady",   channel: "backend:ready" },
+    { method: "onBackendCrashed", channel: "backend:crashed" },
+    { method: "onAlertNew",       channel: "alert:new" },
+  ];
+
+  for (const { method, channel } of listenerMethods) {
+    it(`${method}() registers listener on "${channel}" and returns unsubscribe`, () => {
+      mockIpcRenderer.on.mockClear();
+      mockIpcRenderer.removeListener.mockClear();
+
+      const callback = vi.fn();
+      const unsubscribe = exposedApi.api[method](callback);
+
+      expect(mockIpcRenderer.on).toHaveBeenCalledTimes(1);
+      expect(mockIpcRenderer.on.mock.calls[0][0]).toBe(channel);
+      expect(typeof mockIpcRenderer.on.mock.calls[0][1]).toBe("function");
+
+      // Simulate an event from main process
+      const handler = mockIpcRenderer.on.mock.calls[0][1];
+      handler({}, { some: "data" });
+      expect(callback).toHaveBeenCalledWith({ some: "data" });
+
+      // Unsubscribe should call removeListener
+      expect(typeof unsubscribe).toBe("function");
+      unsubscribe();
+      expect(mockIpcRenderer.removeListener).toHaveBeenCalledWith(channel, handler);
     });
   }
 });
 
-// ── IPC handler channel coverage ─────────────────────────────────────────────
+// ── IPC handler behavioral tests ────────────────────────────────────────────
+//
+// Instead of string-matching main.js source for "ipcMain.handle", we mock
+// Electron's module system, load main.js's registerIpcHandlers function, and
+// verify that handlers are registered for all expected channels with correct
+// behavior.
+//
 
 describe("main.js IPC handler registration", () => {
-  const mainSrc = fs.readFileSync(
-    path.join(process.cwd(), "electron", "main.js"),
-    "utf8"
-  );
+  let registeredHandlers;
+  let mockDialog;
+  let mockShell;
+  let mockApp;
 
-  const expectedHandlers = [
+  beforeEach(() => {
+    registeredHandlers = {};
+
+    const mockIpcMain = {
+      handle: vi.fn((channel, handler) => {
+        registeredHandlers[channel] = handler;
+      }),
+    };
+
+    mockDialog = {
+      showOpenDialog: vi.fn().mockResolvedValue({ canceled: false, filePaths: ["/picked/dir"] }),
+      showErrorBox: vi.fn(),
+    };
+
+    mockShell = {
+      openPath: vi.fn().mockResolvedValue(""),
+      openExternal: vi.fn(),
+    };
+
+    mockApp = {
+      requestSingleInstanceLock: vi.fn().mockReturnValue(true),
+      getVersion: vi.fn().mockReturnValue("9.4.0"),
+      on: vi.fn(),
+      whenReady: vi.fn().mockReturnValue(new Promise(() => {})), // never resolve to prevent lifecycle
+      isQuitting: false,
+      quit: vi.fn(),
+    };
+
+    const mockBrowserWindow = vi.fn();
+    mockBrowserWindow.getAllWindows = vi.fn().mockReturnValue([]);
+
+    const mockNotification = vi.fn().mockImplementation(() => ({
+      show: vi.fn(),
+    }));
+    mockNotification.isSupported = vi.fn().mockReturnValue(true);
+
+    const mockNativeImage = {
+      createFromPath: vi.fn().mockReturnValue({ resize: vi.fn().mockReturnValue({}) }),
+      createEmpty: vi.fn().mockReturnValue({}),
+    };
+
+    const mockTray = vi.fn().mockImplementation(() => ({
+      setToolTip: vi.fn(),
+      setContextMenu: vi.fn(),
+      on: vi.fn(),
+      destroy: vi.fn(),
+    }));
+
+    const mockMenu = {
+      buildFromTemplate: vi.fn().mockReturnValue({}),
+    };
+
+    const mockSession = {
+      defaultSession: {
+        webRequest: {
+          onHeadersReceived: vi.fn(),
+        },
+      },
+    };
+
+    const mainPath = path.join(process.cwd(), "electron", "main.js");
+    const mainSrc = fs.readFileSync(mainPath, "utf8");
+
+    // Extract only the registerIpcHandlers function to avoid side effects.
+    // We find the function body and evaluate it with mocked dependencies.
+    const fnStart = mainSrc.indexOf("function registerIpcHandlers()");
+    const fnBodyStart = mainSrc.indexOf("{", fnStart);
+
+    // Find the matching closing brace by counting braces
+    let depth = 0;
+    let fnEnd = fnBodyStart;
+    for (let i = fnBodyStart; i < mainSrc.length; i++) {
+      if (mainSrc[i] === "{") depth++;
+      if (mainSrc[i] === "}") depth--;
+      if (depth === 0) { fnEnd = i + 1; break; }
+    }
+
+    const fnBody = mainSrc.slice(fnStart, fnEnd);
+
+    // Build a context with all the variables the function references
+    const context = new Function(
+      "ipcMain", "dialog", "shell", "app", "Notification",
+      "mainWindow", "backendReady", "pythonProcess",
+      "API_URL", "API_TOKEN", "ENV_FILE", "ROOT_DIR",
+      "fs", "path", "process",
+      "isRegisteredInStartup", "registerWindowsStartup", "unregisterWindowsStartup",
+      `
+      ${fnBody}
+      registerIpcHandlers();
+      `
+    );
+
+    const tmpDir = path.join("/tmp", "gb-ipc-test-" + Date.now());
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    context(
+      mockIpcMain,
+      mockDialog,
+      mockShell,
+      mockApp,
+      mockNotification,
+      null,            // mainWindow
+      false,           // backendReady
+      null,            // pythonProcess
+      "http://127.0.0.1:8765",
+      "test-api-token",
+      path.join(tmpDir, ".env.local"),
+      tmpDir,
+      fs,
+      path,
+      process,
+      vi.fn().mockReturnValue(false),  // isRegisteredInStartup
+      vi.fn(),                         // registerWindowsStartup
+      vi.fn(),                         // unregisterWindowsStartup
+    );
+
+    // Store tmpDir for cleanup
+    registeredHandlers._tmpDir = tmpDir;
+  });
+
+  afterEach(() => {
+    if (registeredHandlers._tmpDir) {
+      fs.rmSync(registeredHandlers._tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  const expectedChannels = [
     "dialog:open-directory",
     "dialog:open-file",
     "credentials:save",
@@ -404,39 +638,284 @@ describe("main.js IPC handler registration", () => {
     "startup:set",
   ];
 
-  for (const handler of expectedHandlers) {
-    it(`registers handler for "${handler}"`, () => {
-      expect(mainSrc).toContain(`"${handler}"`);
+  for (const channel of expectedChannels) {
+    it(`registers handler for "${channel}"`, () => {
+      expect(registeredHandlers).toHaveProperty(channel);
+      expect(typeof registeredHandlers[channel]).toBe("function");
     });
   }
+
+  it("dialog:open-directory calls dialog.showOpenDialog", async () => {
+    const result = await registeredHandlers["dialog:open-directory"]({});
+    expect(mockDialog.showOpenDialog).toHaveBeenCalled();
+    expect(result).toBe("/picked/dir");
+  });
+
+  it("dialog:open-directory returns null when canceled", async () => {
+    mockDialog.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    const result = await registeredHandlers["dialog:open-directory"]({});
+    expect(result).toBeNull();
+  });
+
+  it("dialog:open-file calls dialog.showOpenDialog with filters", async () => {
+    const filters = [{ name: "JSON", extensions: ["json"] }];
+    mockDialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ["/a/b.json"] });
+    const result = await registeredHandlers["dialog:open-file"]({}, filters);
+    expect(result).toBe("/a/b.json");
+    const callArgs = mockDialog.showOpenDialog.mock.calls[0][1];
+    expect(callArgs.filters).toEqual(filters);
+  });
+
+  it("dialog:open-file uses YAML filter as default", async () => {
+    mockDialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ["/a/b.yaml"] });
+    await registeredHandlers["dialog:open-file"]({}, undefined);
+    const callArgs = mockDialog.showOpenDialog.mock.calls[0][1];
+    expect(callArgs.filters).toEqual([{ name: "YAML", extensions: ["yaml", "yml"] }]);
+  });
+
+  it("app:api-url returns the API URL", async () => {
+    const result = await registeredHandlers["app:api-url"]({});
+    expect(result).toBe("http://127.0.0.1:8765");
+  });
+
+  it("app:version returns the app version", async () => {
+    const result = await registeredHandlers["app:version"]({});
+    expect(result).toBe("9.4.0");
+  });
+
+  it("app:api-token returns the API token", async () => {
+    const result = await registeredHandlers["app:api-token"]({});
+    expect(result).toBe("test-api-token");
+  });
+
+  it("backend:status returns ready state and url", async () => {
+    const result = await registeredHandlers["backend:status"]({});
+    expect(result).toEqual({ ready: false, url: "http://127.0.0.1:8765", pid: null });
+  });
+
+  it("credentials:save rejects unknown keys", async () => {
+    const result = await registeredHandlers["credentials:save"]({}, { key: "UNKNOWN", value: "abc" });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/[Uu]nknown/);
+  });
+
+  it("credentials:save accepts allowed keys and writes .env.local", async () => {
+    const result = await registeredHandlers["credentials:save"](
+      {},
+      { key: "GHOSTBACKUP_ENCRYPTION_KEY", value: "testkey123" }
+    );
+    expect(result.success).toBe(true);
+    const envContent = fs.readFileSync(
+      path.join(registeredHandlers._tmpDir, ".env.local"),
+      "utf8"
+    );
+    expect(envContent).toContain('GHOSTBACKUP_ENCRYPTION_KEY="testkey123"');
+  });
+
+  it("credentials:save rejects values with dangerous characters", async () => {
+    const result = await registeredHandlers["credentials:save"](
+      {},
+      { key: "GHOSTBACKUP_ENCRYPTION_KEY", value: "bad\nvalue" }
+    );
+    expect(result.error).toBeTruthy();
+  });
+
+  it("credentials:status returns boolean status for each credential", async () => {
+    const result = await registeredHandlers["credentials:status"]({});
+    expect(result).toHaveProperty("smtp_password");
+    expect(result).toHaveProperty("encryption_key");
+    expect(result).toHaveProperty("hkdf_salt");
+    expect(typeof result.smtp_password).toBe("boolean");
+  });
+
+  it("shell:open-path rejects empty paths", async () => {
+    const result = await registeredHandlers["shell:open-path"]({}, "");
+    expect(result).toBeUndefined();
+    expect(mockShell.openPath).not.toHaveBeenCalled();
+  });
+
+  it("shell:open-path rejects non-existent paths", async () => {
+    const result = await registeredHandlers["shell:open-path"]({}, "/nonexistent/xyz");
+    expect(result).toEqual({ error: "Path not found" });
+  });
+
+  it("shell:open-path opens valid directories", async () => {
+    await registeredHandlers["shell:open-path"]({}, registeredHandlers._tmpDir);
+    expect(mockShell.openPath).toHaveBeenCalledWith(registeredHandlers._tmpDir);
+  });
+
+  it("startup:get returns a boolean", async () => {
+    const result = await registeredHandlers["startup:get"]({});
+    expect(typeof result).toBe("boolean");
+  });
+
+  it("startup:set returns success status", async () => {
+    const result = await registeredHandlers["startup:set"]({}, true);
+    expect(result).toHaveProperty("success");
+  });
 });
 
-// ── CSP headers ──────────────────────────────────────────────────────────────
+// ── CSP header behavioral tests ─────────────────────────────────────────────
+//
+// Instead of string-matching, we extract and invoke the onHeadersReceived
+// callback from main.js's createWindow function to verify actual CSP headers.
+//
 
 describe("CSP configuration", () => {
-  const mainSrc = fs.readFileSync(
-    path.join(process.cwd(), "electron", "main.js"),
-    "utf8"
-  );
+  let cspCallback;
 
-  it("sets Content-Security-Policy headers", () => {
-    expect(mainSrc).toContain("Content-Security-Policy");
+  beforeEach(() => {
+    // We simulate what createWindow does: it calls
+    //   session.webRequest.onHeadersReceived(callback)
+    // and that callback modifies response headers.
+    //
+    // Extract the production CSP callback from main.js source.
+    const mainPath = path.join(process.cwd(), "electron", "main.js");
+    const mainSrc = fs.readFileSync(mainPath, "utf8");
+
+    // Find the production (non-dev) onHeadersReceived block.
+    // The production block is in the `else` branch after the IS_DEV block.
+    // We look for the second onHeadersReceived callback.
+    const firstIdx = mainSrc.indexOf("onHeadersReceived(");
+    const secondIdx = mainSrc.indexOf("onHeadersReceived(", firstIdx + 1);
+
+    // Extract from the opening paren of the callback to its closing
+    const cbStart = mainSrc.indexOf("(", secondIdx + "onHeadersReceived".length);
+
+    let depth = 0;
+    let cbEnd = cbStart;
+    for (let i = cbStart; i < mainSrc.length; i++) {
+      if (mainSrc[i] === "(") depth++;
+      if (mainSrc[i] === ")") depth--;
+      if (depth === 0) { cbEnd = i + 1; break; }
+    }
+
+    // The content between the parens is the callback function
+    // Format: (details, callback) => { ... }
+    const callbackSrc = mainSrc.slice(cbStart + 1, cbEnd - 1).trim();
+
+    // Wrap it so we can call it
+    cspCallback = new Function("return " + callbackSrc)();
   });
 
-  it("restricts default-src to self", () => {
-    expect(mainSrc).toContain("default-src 'self'");
+  it("sets Content-Security-Policy header in the response", () => {
+    let capturedHeaders = null;
+    const mockCallback = (obj) => { capturedHeaders = obj; };
+
+    cspCallback(
+      { responseHeaders: { "X-Existing": ["keep"] } },
+      mockCallback
+    );
+
+    expect(capturedHeaders).not.toBeNull();
+    expect(capturedHeaders.responseHeaders).toHaveProperty("Content-Security-Policy");
   });
+
+  it("preserves existing response headers", () => {
+    let capturedHeaders = null;
+    const mockCallback = (obj) => { capturedHeaders = obj; };
+
+    cspCallback(
+      { responseHeaders: { "X-Custom": ["myval"] } },
+      mockCallback
+    );
+
+    expect(capturedHeaders.responseHeaders["X-Custom"]).toEqual(["myval"]);
+  });
+
+  it("restricts default-src to 'self'", () => {
+    let capturedHeaders = null;
+    const mockCallback = (obj) => { capturedHeaders = obj; };
+    cspCallback({ responseHeaders: {} }, mockCallback);
+
+    const csp = capturedHeaders.responseHeaders["Content-Security-Policy"][0];
+    expect(csp).toMatch(/default-src\s+'self'/);
+  });
+
+  it("restricts script-src to 'self'", () => {
+    let capturedHeaders = null;
+    const mockCallback = (obj) => { capturedHeaders = obj; };
+    cspCallback({ responseHeaders: {} }, mockCallback);
+
+    const csp = capturedHeaders.responseHeaders["Content-Security-Policy"][0];
+    expect(csp).toMatch(/script-src\s+'self'/);
+  });
+
+  it("allows connect-src for local backend", () => {
+    let capturedHeaders = null;
+    const mockCallback = (obj) => { capturedHeaders = obj; };
+    cspCallback({ responseHeaders: {} }, mockCallback);
+
+    const csp = capturedHeaders.responseHeaders["Content-Security-Policy"][0];
+    expect(csp).toMatch(/connect-src\s+.*127\.0\.0\.1/);
+  });
+
+  it("allows img-src self and data URIs", () => {
+    let capturedHeaders = null;
+    const mockCallback = (obj) => { capturedHeaders = obj; };
+    cspCallback({ responseHeaders: {} }, mockCallback);
+
+    const csp = capturedHeaders.responseHeaders["Content-Security-Policy"][0];
+    expect(csp).toMatch(/img-src\s+'self'\s+data:/);
+  });
+
+  it("CSP is a single string value in an array", () => {
+    let capturedHeaders = null;
+    const mockCallback = (obj) => { capturedHeaders = obj; };
+    cspCallback({ responseHeaders: {} }, mockCallback);
+
+    const cspArr = capturedHeaders.responseHeaders["Content-Security-Policy"];
+    expect(Array.isArray(cspArr)).toBe(true);
+    expect(cspArr).toHaveLength(1);
+    expect(typeof cspArr[0]).toBe("string");
+  });
+});
+
+// ── Window security settings ─────────────────────────────────────────────────
+//
+// Verify that the BrowserWindow webPreferences in main.js use secure defaults.
+//
+
+describe("BrowserWindow security settings", () => {
+  const mainPath = path.join(process.cwd(), "electron", "main.js");
+  const mainSrc = fs.readFileSync(mainPath, "utf8");
+
+  // Extract the webPreferences object from the createWindow function
+  const wpStart = mainSrc.indexOf("webPreferences:");
+  const braceStart = mainSrc.indexOf("{", wpStart);
+  let depth = 0;
+  let braceEnd = braceStart;
+  for (let i = braceStart; i < mainSrc.length; i++) {
+    if (mainSrc[i] === "{") depth++;
+    if (mainSrc[i] === "}") depth--;
+    if (depth === 0) { braceEnd = i + 1; break; }
+  }
+  const wpSrc = mainSrc.slice(braceStart, braceEnd);
+
+  // Parse the object using Function (it references __dirname and path, so provide them)
+  const webPrefs = new Function(
+    "__dirname", "path",
+    `return (${wpSrc})`
+  )(path.join(process.cwd(), "electron"), path);
 
   it("disables nodeIntegration", () => {
-    expect(mainSrc).toContain("nodeIntegration:  false");
+    expect(webPrefs.nodeIntegration).toBe(false);
   });
 
   it("enables contextIsolation", () => {
-    expect(mainSrc).toContain("contextIsolation: true");
+    expect(webPrefs.contextIsolation).toBe(true);
   });
 
   it("enables sandbox", () => {
-    expect(mainSrc).toContain("sandbox:          true");
+    expect(webPrefs.sandbox).toBe(true);
+  });
+
+  it("enables webSecurity", () => {
+    expect(webPrefs.webSecurity).toBe(true);
+  });
+
+  it("sets preload script path", () => {
+    expect(webPrefs.preload).toMatch(/preload\.js$/);
   });
 });
 
