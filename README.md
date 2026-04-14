@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/Egyan07/GhostBackup/ci.yml?label=CI&logo=githubactions&logoColor=white" alt="CI">
-  <img src="https://img.shields.io/badge/tests-675%2B%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-744%2B%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/backend-90%25%20coverage-brightgreen" alt="Backend Coverage">
   <img src="https://img.shields.io/badge/frontend-75%25%20coverage-green" alt="Frontend Coverage">
   <img src="https://img.shields.io/github/license/Egyan07/GhostBackup" alt="License">
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <strong>31 API endpoints</strong> · <strong>675+ tests</strong> · <strong>90% backend coverage</strong> · <strong>7-year retention</strong> · <strong>AES-256-GCM</strong>
+  <strong>31 API endpoints</strong> · <strong>744+ tests</strong> · <strong>90% backend coverage</strong> · <strong>7-year retention</strong> · <strong>AES-256-GCM</strong>
 </p>
 
 <p align="center">
@@ -105,7 +105,7 @@ Source Folders ──> Scan & Encrypt ──> Copy to SSD(s) ──> Verify & Lo
 - **CSV export** of run history from the Logs page
 
 ### Developer Experience
-- **675+ automated tests** across backend, frontend, and Electron
+- **744+ automated tests** across backend, frontend, and Electron
 - **Prettier + Husky** pre-commit hooks enforce formatting
 - **OpenAPI schema** auto-generated and validated in CI
 - **Structured error codes** (GB-Exxx) with actionable fix suggestions
