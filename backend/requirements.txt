@@ -16,7 +16,7 @@ xxhash==3.5.0          # ~10 GB/s file hashing for change detection
 psutil==5.9.8          # disk usage stats, filesystem type
 
 # Encryption at rest (AES-256-GCM streaming + Fernet legacy — accounting data compliance)
-cryptography==44.0.2  # pinned: msal requires <45; CVE-2026-26007 + CVE-2026-34073 ignored in CI
+cryptography==46.0.6  # pinned: msal requires <45; CVE-2026-26007 + CVE-2026-34073 ignored in CI
 
 # File watching (real-time sync)
 watchdog==4.0.1
