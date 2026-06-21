@@ -35,4 +35,4 @@ pytest==9.0.3
 httpx==0.27.2          # required by FastAPI TestClient
 
 # Type checking
-mypy==1.13.0
+mypy==1.20.0
