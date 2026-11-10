@@ -16,7 +16,7 @@ xxhash==3.5.0          # ~10 GB/s file hashing for change detection
 psutil==5.9.8          # disk usage stats, filesystem type
 
 # Encryption at rest (AES-256-GCM streaming + Fernet legacy — accounting data compliance)
-cryptography==44.0.2  # pinned: msal requires <45; CVE-2026-26007 + CVE-2026-34073 ignored in CI
+cryptography==50.0.0  # fixes PYSEC-2026-3552/3553/3554 and GHSA-537c-gmf6-5ccf. CVE-2026-26007 + CVE-2026-34073 still ignored in CI
 
 # File watching (real-time sync)
 watchdog==4.0.1
@@ -28,7 +28,7 @@ slowapi==0.1.9
 keyring>=25.0.0
 
 # Utilities
-python-multipart==0.0.22
+python-multipart==0.0.31  # fixes PYSEC-2026-3036 through 3040
 
 # Testing
 pytest==9.0.3
