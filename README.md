@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <strong>Author: <a href="https://github.com/Egyan07">Egyan07</a></strong> · Deployed at Red Parrot Accounting (UK)
+  <strong>Author: <a href="https://github.com/Egyan07">Egyan07</a></strong> · Running in production at an accounting firm in the UK
 </p>
 
 > **Windows Only** — macOS and Linux are not supported.
@@ -302,7 +302,7 @@ For disaster recovery (lost key, corrupted DB, SSD failure): **[RECOVERY.md](REC
 
 ## Contributing
 
-Built for Red Parrot Accounting, open-sourced under MIT.
+Built for an accounting firm in the UK, open-sourced under MIT.
 
 ### Development Setup
 
